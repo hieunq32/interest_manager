@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { GenericRecord } from "../../backup/types";
 import type {
   Borrower,
   Loan,
@@ -189,5 +190,29 @@ describe("IndexedDbLendingRepository", () => {
     await repository.saveScheduleEntries([replacementEntry]);
 
     await expect(repository.listScheduleEntries(version.id)).resolves.toEqual([replacementEntry, secondEntry]);
+  });
+
+  it("ignores unrelated input records while preserving existing shared-store records during restore", async () => {
+    const source = createRepository();
+    await source.saveBorrower(borrower);
+    const domainRecords = await source.listAllDomainRecords();
+    const targetStore = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
+    const target = new IndexedDbLendingRepository(targetStore);
+    const existingSharedRecord: GenericRecord = {
+      id: "system-record",
+      type: "system.smoke",
+      createdAt,
+      updatedAt,
+      data: { origin: "target" },
+    };
+    const unrelatedInputRecord: GenericRecord = {
+      ...existingSharedRecord,
+      data: { origin: "backup" },
+    };
+
+    await targetStore.upsertRecord(existingSharedRecord);
+    await target.replaceAllDomainRecords([...domainRecords, unrelatedInputRecord]);
+
+    await expect(targetStore.listRecords()).resolves.toEqual([...domainRecords, existingSharedRecord]);
   });
 });

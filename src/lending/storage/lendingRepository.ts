@@ -142,7 +142,8 @@ export class IndexedDbLendingRepository implements LendingRepository {
   async replaceAllDomainRecords(values: GenericRecord[]): Promise<void> {
     const existingRecords = await this.store.listRecords();
     const nonDomainRecords = existingRecords.filter((record) => !isLendingRecordType(record.type));
-    await this.store.replaceRecords([...nonDomainRecords, ...values]);
+    const domainRecords = values.filter((record) => isLendingRecordType(record.type));
+    await this.store.replaceRecords([...nonDomainRecords, ...domainRecords]);
   }
 
   private async listData<T extends LendingRecordType>(type: T): Promise<LendingRecordData[T][]> {
