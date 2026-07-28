@@ -86,11 +86,11 @@ Create `package.json` with these scripts and dependencies:
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "idb": "latest",
@@ -105,13 +105,18 @@ Create `package.json` with these scripts and dependencies:
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-react": "5.1.4",
     "fake-indexeddb": "latest",
     "jsdom": "latest",
     "typescript": "latest",
-    "vite": "latest",
-    "vite-plugin-pwa": "latest",
-    "vitest": "latest"
+    "vite": "7.3.6",
+    "vite-plugin-pwa": "1.2.0",
+    "vitest": "3.2.7"
+  },
+  "overrides": {
+    "workbox-build": {
+      "@trickfilm400/rollup-plugin-off-main-thread": "4.0.0-pre2"
+    }
   }
 }
 ```
@@ -131,15 +136,14 @@ Create `tsconfig.json`:
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
     "types": ["vitest/globals", "@testing-library/jest-dom", "node"]
   },
-  "include": ["src", "vitest.setup.ts"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "vite.config.ts", "vitest.setup.ts"]
 }
 ```
 
@@ -150,7 +154,7 @@ Create `tsconfig.node.json`:
   "compilerOptions": {
     "composite": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "allowSyntheticDefaultImports": true,
     "strict": true
   },
