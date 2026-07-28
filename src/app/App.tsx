@@ -1,7 +1,7 @@
 import { Archive, FileUp, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEncryptedBackup, restoreEncryptedBackup } from "../backup/backupService";
-import { calculateEntryStatus } from "../lending/domain/ledger";
+import { calculateEntryStatus, calculateLoanSummary } from "../lending/domain/ledger";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
 import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
@@ -11,9 +11,10 @@ import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository
 import { BorrowerDetail } from "../lending/ui/BorrowerDetail";
 import { BorrowerForm } from "../lending/ui/BorrowerForm";
 import { BorrowerList } from "../lending/ui/BorrowerList";
-import { formatMoneyVnd } from "../lending/ui/lendingLabels";
+import { Dashboard } from "../lending/ui/Dashboard";
 import { LoanForm, type LoanDraft } from "../lending/ui/LoanForm";
 import { LoanDetail } from "../lending/ui/LoanDetail";
+import { ReminderSettings } from "../lending/ui/ReminderSettings";
 import { AppError } from "../shared/errors";
 import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
 import type { StorageHealth } from "../storage/types";
@@ -47,6 +48,10 @@ function todayFileName(): string {
   return `interest-manager-backup-${new Date().toISOString().slice(0, 10)}.json`;
 }
 
+function calendarFileName(today: string): string {
+  return `interest-manager-calendar-${today}.ics`;
+}
+
 function downloadJson(fileName: string, value: unknown): void {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -74,6 +79,17 @@ function messageFromRestoreError(error: unknown): string {
   return "Restore failed";
 }
 
+function downloadCalendar(fileName: string, content: string): void {
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function todayInVietnam(): string {
   const parts = new Intl.DateTimeFormat("en", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -98,6 +114,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [promises, setPromises] = useState<PromiseToPay[]>([]);
+  const [reminderSettings, setReminderSettings] = useState(DEFAULT_REMINDER_SETTINGS);
   const [mode, setMode] = useState<"none" | "create-borrower" | "edit-borrower" | "create-loan">("none");
   const [backupPassphrase, setBackupPassphrase] = useState("");
   const [restorePassphrase, setRestorePassphrase] = useState("");
@@ -108,13 +125,14 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   }, [store]);
 
   const refreshLendingData = useCallback(async () => {
-    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPromises] = await Promise.all([
+    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPromises, nextReminderSettings] = await Promise.all([
       repository.listBorrowers(),
       repository.listLoans(),
       repository.listScheduleVersions(),
       repository.listScheduleEntries(),
       repository.listPayments(),
       repository.listPromises(),
+      repository.getReminderSettings(),
     ]);
     setBorrowers(nextBorrowers);
     setLoans(nextLoans);
@@ -122,6 +140,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setScheduleEntries(nextEntries);
     setPayments(nextPayments);
     setPromises(nextPromises);
+    setReminderSettings(nextReminderSettings ?? DEFAULT_REMINDER_SETTINGS);
   }, [repository]);
 
   useEffect(() => {
@@ -238,6 +257,13 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setMessage(value.status === "fulfilled" ? "Promise fulfilled" : "Promise cancelled");
   };
 
+  const saveReminderSettings = async (value: typeof reminderSettings) => {
+    await repository.saveReminderSettings(value);
+    setReminderSettings(value);
+    await refreshHealth();
+    setMessage("Reminder settings saved");
+  };
+
   const saveRevision = async (loanToRevise: Loan, input: RevisionInput) => {
     const revision = createScheduleRevision(input);
     await repository.saveLoanBundle({
@@ -271,7 +297,6 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     promises: PromiseToPay[];
   }) => {
     try {
-      const globalSettings = await repository.getReminderSettings() ?? DEFAULT_REMINDER_SETTINGS;
       const today = todayInVietnam();
       const entries = input.entries
         .filter((entry) => entry.scheduleVersionId === input.loan.defaultScheduleVersionId)
@@ -279,19 +304,24 @@ export function App({ dbName, onCalendarExport }: AppProps) {
           ...entry,
           status: calculateEntryStatus({ entry, payments: input.payments, promises: input.promises, today }),
         }));
-      const content = buildIcsCalendar(buildScheduleCalendarEvents({
+      const content = buildIcsCalendar(input.loan.status === "active" ? buildScheduleCalendarEvents({
         entries,
         promises: input.promises,
         borrowerName: input.borrowerName,
         loanLabel: `Loan ${input.loan.id}`,
-        settings: resolveReminderSettings(globalSettings, input.loan.reminderOverride),
+        settings: resolveReminderSettings(reminderSettings, input.loan.reminderOverride),
         today,
-      }));
-      await onCalendarExport?.({
+      }) : []);
+      const preparedExport = {
         content,
         loanId: input.loan.id,
         scheduleVersionId: input.loan.defaultScheduleVersionId,
-      });
+      };
+      if (onCalendarExport) {
+        await onCalendarExport(preparedExport);
+      } else {
+        downloadCalendar(calendarFileName(today), content);
+      }
       await markCalendarExportCurrent(input.loan, input.loan.defaultScheduleVersionId);
     } catch {
       setMessage("Calendar export could not be prepared");
@@ -304,7 +334,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       return;
     }
 
-    const records = await store.listRecords();
+    const records = await repository.listAllDomainRecords();
     const backup = await createEncryptedBackup(records, backupPassphrase);
     downloadJson(todayFileName(), backup);
     setMessage("Backup exported");
@@ -326,7 +356,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         setMessage("Restore cancelled");
         return;
       }
-      await store.replaceRecords(restored.records);
+      await repository.replaceAllDomainRecords(restored.records);
       setMessage("Backup restored");
       await Promise.all([refreshHealth(), refreshLendingData()]);
     } catch (error) {
@@ -340,11 +370,21 @@ export function App({ dbName, onCalendarExport }: AppProps) {
 
   const borrower = route.name === "borrower" ? borrowers.find((candidate) => candidate.id === route.borrowerId) : undefined;
   const loan = route.name === "loan" ? loans.find((candidate) => candidate.id === route.loanId) : undefined;
+  const dashboardSummaries = loans
+    .filter((candidate) => candidate.status === "active")
+    .map((candidate) => calculateLoanSummary({
+      loanId: candidate.id,
+      entries: scheduleEntries.filter((entry) => entry.scheduleVersionId === candidate.defaultScheduleVersionId),
+      payments: payments.filter((payment) => payment.loanId === candidate.id),
+      promises: promises.filter((promise) => promise.loanId === candidate.id),
+      today: todayInVietnam(),
+    }));
 
   const routeContent = (() => {
     if (route.name === "settings") {
       return (
         <section className="operations-grid" aria-label="Backup and restore">
+          <ReminderSettings value={reminderSettings} onSave={saveReminderSettings} />
           <div className="operation-panel">
             <h2>Backup</h2>
             <Field label="Backup passphrase" type="password" value={backupPassphrase} onChange={(event) => setBackupPassphrase(event.target.value)} />
@@ -404,7 +444,10 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     if (mode === "create-borrower") {
       return <section className="route-panel"><h2>New borrower</h2><BorrowerForm onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
     }
-    return <section className="route-panel" aria-labelledby="borrowers-heading"><div className="route-heading"><h2 id="borrowers-heading">Borrowers</h2><Button icon={<Plus aria-hidden="true" size={18} />} variant="primary" onClick={() => setMode("create-borrower")}>New borrower</Button></div><BorrowerList borrowers={borrowers} onSelect={(borrowerId) => navigate({ name: "borrower", borrowerId })} /></section>;
+    return <>
+      <Dashboard summaries={dashboardSummaries} onOpenLoan={(loanId) => navigate({ name: "loan", loanId })} />
+      <section className="route-panel" aria-labelledby="borrowers-heading"><div className="route-heading"><h2 id="borrowers-heading">Borrowers</h2><Button icon={<Plus aria-hidden="true" size={18} />} variant="primary" onClick={() => setMode("create-borrower")}>New borrower</Button></div><BorrowerList borrowers={borrowers} onSelect={(borrowerId) => navigate({ name: "borrower", borrowerId })} /></section>
+    </>;
   })();
 
   return (

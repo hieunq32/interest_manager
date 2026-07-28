@@ -79,7 +79,7 @@ describe("entry status", () => {
 });
 
 describe("loan summaries", () => {
-  it("reports independent balances, due counts, overdue count, and the next unresolved due date", () => {
+  it("reports independent balances, due counts, promised count, overdue count, and the next unresolved due date", () => {
     const entries = [
       entry({ id: "overdue", dueDate: "2026-07-08", expectedPrincipal: 500, expectedInterest: 50 }),
       entry({ id: "today", dueDate: "2026-07-10", expectedPrincipal: 600, expectedInterest: 60 }),
@@ -104,6 +104,7 @@ describe("loan summaries", () => {
       outstandingInterest: 190,
       dueToday: 1,
       dueSoon: 1,
+      promised: 1,
       overdue: 0,
       nextDueDate: "2026-07-10",
     });

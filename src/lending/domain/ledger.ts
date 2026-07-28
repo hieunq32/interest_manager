@@ -21,6 +21,7 @@ export interface LoanSummary {
   outstandingInterest: MoneyVnd;
   dueToday: number;
   dueSoon: number;
+  promised: number;
   overdue: number;
   nextDueDate?: DateOnly;
 }
@@ -106,6 +107,7 @@ export function calculateLoanSummary(input: {
   let outstandingInterest = 0;
   let dueToday = 0;
   let dueSoon = 0;
+  let promised = 0;
   let overdue = 0;
   const unresolvedDueDates: DateOnly[] = [];
 
@@ -120,6 +122,9 @@ export function calculateLoanSummary(input: {
     }
     if (status === "due") {
       dueToday += 1;
+    }
+    if (status === "promised") {
+      promised += 1;
     }
     if (
       status !== "paid" &&
@@ -140,6 +145,7 @@ export function calculateLoanSummary(input: {
     outstandingInterest,
     dueToday,
     dueSoon,
+    promised,
     overdue,
     nextDueDate: unresolvedDueDates.sort(compareDateOnly)[0],
   };

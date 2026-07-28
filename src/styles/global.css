@@ -31,7 +31,8 @@ textarea {
 
 .hero-band,
 .status-strip,
-.operations-grid {
+.operations-grid,
+.dashboard {
   width: min(100%, 980px);
   margin-inline: auto;
 }
@@ -122,6 +123,102 @@ h2 {
   gap: 12px;
 }
 
+.dashboard {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.dashboard-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.dashboard-totals p {
+  min-width: 0;
+  margin: 0;
+  border-left: 3px solid #4c7a62;
+  padding: 8px 10px;
+  color: #3f4b42;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-section {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid #dfe4d8;
+  padding-top: 10px;
+}
+
+.dashboard-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.dashboard-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 46px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cad5c5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #17201a;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dashboard-row > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-count {
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.dashboard-count-due {
+  color: #1d4c6b;
+}
+
+.dashboard-count-upcoming {
+  color: #1e5b2a;
+}
+
+.dashboard-count-promised {
+  color: #6f4d00;
+}
+
+.dashboard-count-overdue {
+  color: #842416;
+}
+
 .operation-panel {
   display: grid;
   align-content: start;
@@ -190,6 +287,16 @@ h2 {
   padding: 0 12px;
   color: #17201a;
   background: #ffffff;
+}
+
+.button:focus-visible,
+.dashboard-row:focus-visible,
+.app-nav a:focus-visible,
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: 3px solid #1d6da1;
+  outline-offset: 2px;
 }
 
 .field textarea {
@@ -381,5 +488,10 @@ h2 {
 
   .route-heading .button {
     width: 100%;
+  }
+
+  .dashboard-totals,
+  .dashboard-sections {
+    grid-template-columns: 1fr;
   }
 }
