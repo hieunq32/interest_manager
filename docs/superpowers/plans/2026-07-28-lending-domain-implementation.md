@@ -380,6 +380,7 @@ validateRevisionReason(input: {
 createScheduleRevision(input: RevisionInput): {
   version: ScheduleVersion;
   entries: ScheduleEntry[];
+  activeScheduleVersionId: string;
 }
 ```
 
