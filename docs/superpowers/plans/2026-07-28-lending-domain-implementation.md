@@ -464,6 +464,7 @@ export interface CalendarEventInput {
   summary: string;
   description: string;
   reminderOffsetDays: number;
+  dtstampUtc: string;
 }
 
 buildIcsCalendar(events: CalendarEventInput[]): string
@@ -473,6 +474,7 @@ buildScheduleCalendarEvents(input: {
   borrowerName: string;
   loanLabel: string;
   settings: ReminderSettings;
+  today: DateOnly;
 }): CalendarEventInput[]
 ```
 
@@ -482,6 +484,7 @@ buildScheduleCalendarEvents(input: {
 - [ ] Write a failing ICS test proving `VCALENDAR`/`VEVENT` output contains stable UID, local reminder time converted from Asia/Ho_Chi_Minh to UTC, `TRIGGER:-P1D`, and CRLF line endings.
 - [ ] Write a failing escaping test for commas, semicolons, backslashes, and newlines in borrower names, notes, and descriptions.
 - [ ] Write a failing event-selection test that excludes fully paid schedule entries and closed promises, includes due entries and open promise dates, and marks events with a stable description.
+- [ ] Write a failing purity test proving event selection uses the supplied Vietnam `today` date, includes an open future promise even when its linked entry is paid, and serializes a deterministic `DTSTAMP` for every event.
 - [ ] Implement deterministic `.ics` serialization. Use a fixed `PRODID`, CRLF separators, UTC `DTSTART`, and escaped text fields. Vietnam has no DST, so convert configured local time by subtracting seven hours.
 - [ ] Implement download helpers at the UI boundary only. The domain/reminder module returns text and does not access `document`.
 - [ ] Return stable schedule-version/event identity metadata from this domain module. The stale-calendar state and re-export warning are rendered and persisted by the Task 8/9 UI workflow after a schedule revision; do not add browser state here.
