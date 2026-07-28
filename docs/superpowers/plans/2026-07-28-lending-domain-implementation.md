@@ -589,8 +589,10 @@ ScheduleRevisionFormProps: {
 - [ ] Implement loan detail sections for current balance, next due date, due/overdue counts, schedule-version history, payment history, promise history, and schedule rows.
 - [ ] Add per-entry actions for record payment, record promise, mark promise fulfilled/cancelled, and open a revision flow. Keep the original due date visible when a promise is late.
 - [ ] Show principal and interest expected/received/outstanding separately. Do not merge them into one opaque total.
+- [ ] Derive current balances from entries across all schedule versions so payments linked to an immutable pre-revision entry continue reducing the loan balance; show the active schedule and historical versions separately.
 - [ ] Show old schedule versions read-only and label the active version. Existing payments remain attached to their original entry/version.
-- [ ] Add the Calendar export action/state and show stale-export state after a revision. This task prepares the pure `.ics` content and export metadata; the browser Blob download is wired by Task 9.
+- [ ] Build the pure `.ics` content before marking an export current, pass the prepared content and version metadata to the Task 9 download boundary, and show stale-export state after a revision.
+- [ ] Persist a revision's loan pointer, new version, and new entries with the existing repository bundle transaction so a partial revision cannot become active.
 - [ ] Refresh derived statuses and summaries after each mutation without requiring a full page reload.
 - [ ] Run focused UI tests, full tests, typecheck, and production build.
 - [ ] Commit as `feat: add lending payment and revision workflows`.
