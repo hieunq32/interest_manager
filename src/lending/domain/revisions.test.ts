@@ -49,6 +49,7 @@ describe("schedule revisions", () => {
       createdAt: "2026-09-12T00:00:00.000Z",
     });
     expect(result.version.id).not.toBe(previous.id);
+    expect(result.activeScheduleVersionId).toBe(result.version.id);
     expect(previous).toEqual(version());
     expect(result.entries.map((item) => [item.scheduleVersionId, item.periodStart, item.dueDate])).toEqual([
       [result.version.id, "2026-09-12", "2026-10-05"],

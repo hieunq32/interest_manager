@@ -69,6 +69,7 @@ describe("entry status", () => {
     ["partially paid", entry(), [payment({ principalAmount: 1_000, interestAmount: 20 })], [], "2026-07-10", "partially-paid"],
     ["overdue", entry(), [], [], "2026-07-11", "overdue"],
     ["open future promise", entry(), [], [promise({ promisedDate: "2026-07-12" })], "2026-07-11", "promised"],
+    ["promise due today", entry(), [], [promise({ promisedDate: "2026-07-10" })], "2026-07-10", "overdue"],
     ["expired promise", entry(), [], [promise({ promisedDate: "2026-07-10" })], "2026-07-11", "overdue"],
   ];
 

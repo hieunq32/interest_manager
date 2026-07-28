@@ -38,7 +38,11 @@ export function validateRevisionReason(input: {
   }
 }
 
-export function createScheduleRevision(input: RevisionInput): { version: ScheduleVersion; entries: ScheduleEntry[] } {
+export function createScheduleRevision(input: RevisionInput): {
+  version: ScheduleVersion;
+  entries: ScheduleEntry[];
+  activeScheduleVersionId: string;
+} {
   const adjustmentReason = input.adjustmentReason?.trim() || undefined;
   const version: ScheduleVersion = {
     ...input.previous,
@@ -51,5 +55,5 @@ export function createScheduleRevision(input: RevisionInput): { version: Schedul
   };
   validateRevisionReason({ previous: input.previous, next: version, adjustmentReason });
 
-  return { version, entries: generateSchedule(version) };
+  return { version, entries: generateSchedule(version), activeScheduleVersionId: version.id };
 }

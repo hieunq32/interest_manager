@@ -28,7 +28,7 @@ export interface LoanSummary {
 const DUE_SOON_DAYS = 7;
 
 function isOpenFuturePromise(promise: PromiseToPay, today: DateOnly): boolean {
-  return promise.status === "open" && compareDateOnly(promise.promisedDate, today) >= 0;
+  return promise.status === "open" && compareDateOnly(promise.promisedDate, today) > 0;
 }
 
 function addDays(date: DateOnly, days: number): DateOnly {
@@ -69,6 +69,17 @@ export function calculateEntryStatus(input: {
     )
   ) {
     return "promised";
+  }
+
+  if (
+    input.promises.some(
+      (promise) =>
+        promise.scheduleEntryId === input.entry.id &&
+        promise.status === "open" &&
+        compareDateOnly(promise.promisedDate, input.today) <= 0,
+    )
+  ) {
+    return "overdue";
   }
 
   if (compareDateOnly(input.entry.dueDate, input.today) < 0) {

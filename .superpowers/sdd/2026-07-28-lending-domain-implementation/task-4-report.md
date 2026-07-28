@@ -36,3 +36,21 @@ The approved contract now requires `loanId` in `calculateLoanSummary(input)`. Th
 ### Remaining Concerns
 
 None.
+
+## Review Fix Round 1
+
+- Open promises are now future only when their promised date is strictly after today. An unpaid entry with an open promise due today derives as overdue, without mutating the promise or original due date.
+- `createScheduleRevision` now returns `activeScheduleVersionId`, equal to the newly created version ID, so repository and UI layers can explicitly update `Loan.defaultScheduleVersionId` while preserving historical versions and payments.
+
+### Commands and Output
+
+- `npm test -- src/lending/domain/ledger.test.ts src/lending/domain/revisions.test.ts`
+  - 2 files passed, 13 tests passed.
+- `npm run typecheck`
+  - `tsc --noEmit` completed successfully.
+- `npm test`
+  - 11 files passed, 64 tests passed.
+
+### Remaining Concerns
+
+None.
