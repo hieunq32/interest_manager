@@ -4,6 +4,8 @@ import { resolveReminderSettings } from "./reminderSettings";
 
 const PRODID = "-//Interest Manager//Lending Reminders//EN";
 const VIETNAM_UTC_OFFSET_HOURS = 7;
+const UTC_TIMESTAMP_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/;
 
 export interface CalendarEventInput {
   uid: string;
@@ -12,6 +14,7 @@ export interface CalendarEventInput {
   summary: string;
   description: string;
   reminderOffsetDays: number;
+  dtstampUtc: string;
 }
 
 function escapeText(value: string): string {
@@ -53,15 +56,34 @@ function formatUtcDateTime(date: DateOnly, time: string): string {
   return `${String(value.getUTCFullYear()).padStart(4, "0")}${String(value.getUTCMonth() + 1).padStart(2, "0")}${String(value.getUTCDate()).padStart(2, "0")}T${String(value.getUTCHours()).padStart(2, "0")}${String(value.getUTCMinutes()).padStart(2, "0")}00Z`;
 }
 
+function formatUtcTimestamp(dtstampUtc: string): string {
+  const match = UTC_TIMESTAMP_PATTERN.exec(dtstampUtc);
+  if (!match) {
+    throw new Error("dtstampUtc must be an ISO UTC timestamp");
+  }
+
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  const value = new Date(0);
+  value.setUTCFullYear(year, month - 1, day);
+  value.setUTCHours(hour, minute, second, 0);
+  if (
+    value.getUTCFullYear() !== year ||
+    value.getUTCMonth() !== month - 1 ||
+    value.getUTCDate() !== day ||
+    value.getUTCHours() !== hour ||
+    value.getUTCMinutes() !== minute ||
+    value.getUTCSeconds() !== second
+  ) {
+    throw new Error("dtstampUtc must be a valid ISO UTC timestamp");
+  }
+
+  return `${String(year).padStart(4, "0")}${String(month).padStart(2, "0")}${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}${String(second).padStart(2, "0")}Z`;
+}
+
 function assertValidEvent(event: CalendarEventInput): void {
   if (!Number.isInteger(event.reminderOffsetDays) || event.reminderOffsetDays < 0) {
     throw new Error("reminderOffsetDays must be a non-negative integer");
   }
-}
-
-function vietnamToday(): DateOnly {
-  const local = new Date(Date.now() + VIETNAM_UTC_OFFSET_HOURS * 60 * 60 * 1_000);
-  return `${String(local.getUTCFullYear()).padStart(4, "0")}-${String(local.getUTCMonth() + 1).padStart(2, "0")}-${String(local.getUTCDate()).padStart(2, "0")}`;
 }
 
 function scheduleEntryDescription(entry: ScheduleEntry, borrowerName: string, loanLabel: string): string {
@@ -100,6 +122,7 @@ export function buildIcsCalendar(events: CalendarEventInput[]): string {
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeText(event.uid)}`,
+      `DTSTAMP:${formatUtcTimestamp(event.dtstampUtc)}`,
       `DTSTART:${formatUtcDateTime(event.date, event.time)}`,
       `SUMMARY:${escapeText(event.summary)}`,
       `DESCRIPTION:${escapeText(event.description)}`,
@@ -122,19 +145,22 @@ export function buildScheduleCalendarEvents(input: {
   borrowerName: string;
   loanLabel: string;
   settings: ReminderSettings;
+  today: DateOnly;
 }): CalendarEventInput[] {
   const settings = resolveReminderSettings(input.settings);
   if (!settings.enabled) {
     return [];
   }
 
-  const today = vietnamToday();
+  if (!isDateOnly(input.today)) {
+    throw new Error(`Invalid date-only value: ${input.today}`);
+  }
   const entriesById = new Map(input.entries.map((entry) => [entry.id, entry]));
   const events: CalendarEventInput[] = [];
 
   for (const entry of input.entries) {
     const outstandingAmount = entry.expectedPrincipal + entry.expectedInterest;
-    if (entry.status === "paid" || outstandingAmount <= 0 || compareDateOnly(entry.dueDate, today) <= 0) {
+    if (entry.status === "paid" || outstandingAmount <= 0 || compareDateOnly(entry.dueDate, input.today) <= 0) {
       continue;
     }
     events.push({
@@ -144,6 +170,7 @@ export function buildScheduleCalendarEvents(input: {
       summary: `Payment due: ${input.loanLabel}`,
       description: scheduleEntryDescription(entry, input.borrowerName, input.loanLabel),
       reminderOffsetDays: settings.offsetDays,
+      dtstampUtc: entry.createdAt,
     });
   }
 
@@ -152,8 +179,7 @@ export function buildScheduleCalendarEvents(input: {
     if (
       promise.status !== "open" ||
       entry === undefined ||
-      entry.status === "paid" ||
-      compareDateOnly(promise.promisedDate, today) <= 0
+      compareDateOnly(promise.promisedDate, input.today) <= 0
     ) {
       continue;
     }
@@ -164,6 +190,7 @@ export function buildScheduleCalendarEvents(input: {
       summary: `Promise to pay: ${input.loanLabel}`,
       description: promiseDescription(promise, entry, input.borrowerName, input.loanLabel),
       reminderOffsetDays: settings.offsetDays,
+      dtstampUtc: promise.createdAt,
     });
   }
 

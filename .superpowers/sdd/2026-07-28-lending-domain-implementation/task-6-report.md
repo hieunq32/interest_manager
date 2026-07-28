@@ -37,3 +37,28 @@
 ## Concerns
 
 - The task brief also lists stale-calendar state, but its assigned constraints explicitly exclude UI/dashboard work. That UI-bound state remains for its owning task.
+
+## Fix Round 1
+
+### Changes
+
+- Removed clock access from event selection. Callers now provide a DateOnly today value, which is validated and used for all future-date filtering.
+- Open future promises remain calendar events even when their linked schedule entry is paid. Closed and non-open promise statuses remain excluded.
+- CalendarEventInput now carries dtstampUtc. Schedule and promise events derive it from their immutable createdAt values, and each VEVENT emits a validated, formatted UTC DTSTAMP.
+
+### TDD Evidence
+
+1. Added regression expectations for supplied-today filtering, open promises linked to paid entries, deterministic DTSTAMP output, and malformed non-UTC timestamp rejection.
+2. Focused tests failed as expected: no DTSTAMP was emitted, event filtering still read the system clock, and paid entries suppressed their open promises.
+3. Implemented the minimal pure-data changes and reran the focused suite successfully.
+
+### Commands and Output
+
+- npm test -- src/lending/reminders/reminderSettings.test.ts src/lending/reminders/ical.test.ts: 2 files, 16 tests passed.
+- npm run typecheck: passed.
+- npm test: 14 files, 85 tests passed.
+- git diff --check: passed.
+
+### Commit
+
+- Pending fix commit.

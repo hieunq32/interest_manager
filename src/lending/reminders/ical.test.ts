@@ -47,6 +47,7 @@ describe("iCalendar serialization", () => {
         summary: "Payment due: Home loan",
         description: "Borrower: Lan",
         reminderOffsetDays: 1,
+        dtstampUtc: "2026-07-01T00:00:00.000Z",
       },
       {
         uid: "promise-version-7-promise-1@interest-manager.local",
@@ -55,6 +56,7 @@ describe("iCalendar serialization", () => {
         summary: "Promise to pay: Home loan",
         description: "Borrower: Lan",
         reminderOffsetDays: 1,
+        dtstampUtc: "2026-07-10T00:00:00.000Z",
       },
     ];
 
@@ -63,6 +65,7 @@ describe("iCalendar serialization", () => {
     expect(result).toContain("BEGIN:VCALENDAR\r\n");
     expect(result).toContain("BEGIN:VEVENT\r\n");
     expect(result).toContain("UID:entry-version-7-entry-1@interest-manager.local\r\n");
+    expect(result).toContain("DTSTAMP:20260701T000000Z\r\n");
     expect(result).toContain("DTSTART:20260712T010000Z\r\n");
     expect(result).toContain("TRIGGER:-P1D\r\n");
     expect(result).toMatch(/\r\n$/);
@@ -71,9 +74,6 @@ describe("iCalendar serialization", () => {
   });
 
   it("escapes commas, semicolons, backslashes, and newlines from borrower names and notes", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-10T00:00:00.000Z"));
-
     const result = buildIcsCalendar(
       buildScheduleCalendarEvents({
         entries: [entry()],
@@ -81,6 +81,7 @@ describe("iCalendar serialization", () => {
         borrowerName: "Lan, Nguyen; \\ family\nSecond line",
         loanLabel: "Home loan",
         settings: settings(),
+        today: "2026-07-10",
       }),
     );
 
@@ -88,10 +89,23 @@ describe("iCalendar serialization", () => {
     expect(result).toContain("Note: Follow\\, up\\; \\\\ tomorrow\\nAfter lunch\r\n");
   });
 
-  it("exports only future outstanding entries and open future promises with stable descriptions", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-10T00:00:00.000Z"));
+  it("rejects a non-UTC deterministic event timestamp", () => {
+    expect(() =>
+      buildIcsCalendar([
+        {
+          uid: "entry-version-7-entry-1@interest-manager.local",
+          date: "2026-07-12",
+          time: "08:00",
+          summary: "Payment due: Home loan",
+          description: "Borrower: Lan",
+          reminderOffsetDays: 1,
+          dtstampUtc: "2026-07-01T00:00:00+07:00",
+        },
+      ]),
+    ).toThrow(/dtstampUtc/);
+  });
 
+  it("exports only future outstanding entries and open future promises with stable descriptions", () => {
     const events = buildScheduleCalendarEvents({
       entries: [
         entry(),
@@ -107,6 +121,7 @@ describe("iCalendar serialization", () => {
       borrowerName: "Lan Nguyen",
       loanLabel: "Home loan",
       settings: settings(),
+      today: "2026-07-10",
     });
 
     expect(events).toEqual([
@@ -118,6 +133,7 @@ describe("iCalendar serialization", () => {
         description:
           "Borrower: Lan Nguyen\nLoan: Home loan\nSchedule version: version-7\nSchedule entry: entry-1\nDue date: 2026-07-12\nOutstanding: 1100 VND",
         reminderOffsetDays: 1,
+        dtstampUtc: "2026-07-01T00:00:00.000Z",
       },
       {
         uid: "promise-version-7-promise-1@interest-manager.local",
@@ -127,11 +143,25 @@ describe("iCalendar serialization", () => {
         description:
           "Borrower: Lan Nguyen\nLoan: Home loan\nSchedule version: version-7\nSchedule entry: entry-1\nPromise: promise-1\nPromised date: 2026-07-15\nNote: Will pay after payday",
         reminderOffsetDays: 1,
+        dtstampUtc: "2026-07-10T00:00:00.000Z",
       },
     ]);
   });
 
   it("does not generate events when reminders are disabled for the loan", () => {
+    expect(
+      buildScheduleCalendarEvents({
+        entries: [entry()],
+        promises: [promise()],
+        borrowerName: "Lan Nguyen",
+        loanLabel: "Home loan",
+        settings: settings({ enabled: false }),
+        today: "2026-07-10",
+      }),
+    ).toEqual([]);
+  });
+
+  it("uses the supplied today value instead of the system clock for future filtering", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-10T00:00:00.000Z"));
 
@@ -141,8 +171,33 @@ describe("iCalendar serialization", () => {
         promises: [promise()],
         borrowerName: "Lan Nguyen",
         loanLabel: "Home loan",
-        settings: settings({ enabled: false }),
+        settings: settings(),
+        today: "2026-07-16",
       }),
     ).toEqual([]);
+  });
+
+  it("keeps an open future promise when its linked schedule entry is paid", () => {
+    expect(
+      buildScheduleCalendarEvents({
+        entries: [entry({ status: "paid" })],
+        promises: [promise()],
+        borrowerName: "Lan Nguyen",
+        loanLabel: "Home loan",
+        settings: settings(),
+        today: "2026-07-10",
+      }),
+    ).toEqual([
+      {
+        uid: "promise-version-7-promise-1@interest-manager.local",
+        date: "2026-07-15",
+        time: "08:00",
+        summary: "Promise to pay: Home loan",
+        description:
+          "Borrower: Lan Nguyen\nLoan: Home loan\nSchedule version: version-7\nSchedule entry: entry-1\nPromise: promise-1\nPromised date: 2026-07-15\nNote: Will pay after payday",
+        reminderOffsetDays: 1,
+        dtstampUtc: "2026-07-10T00:00:00.000Z",
+      },
+    ]);
   });
 });
