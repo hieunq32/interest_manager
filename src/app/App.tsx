@@ -1,13 +1,21 @@
-import { Archive, FileUp, Plus, Trash2 } from "lucide-react";
+import { Archive, FileUp, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEncryptedBackup, restoreEncryptedBackup } from "../backup/backupService";
-import type { GenericRecord } from "../backup/types";
+import { generateSchedule } from "../lending/domain/scheduleGenerator";
+import type { Borrower, Loan, ScheduleVersion } from "../lending/domain/types";
+import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
+import { BorrowerDetail } from "../lending/ui/BorrowerDetail";
+import { BorrowerForm } from "../lending/ui/BorrowerForm";
+import { BorrowerList } from "../lending/ui/BorrowerList";
+import { formatMoneyVnd } from "../lending/ui/lendingLabels";
+import { LoanForm, type LoanDraft } from "../lending/ui/LoanForm";
 import { AppError } from "../shared/errors";
 import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
 import type { StorageHealth } from "../storage/types";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { StatusBadge } from "../ui/StatusBadge";
+import { parseHashRoute, serializeHashRoute, type Route } from "./routes";
 
 type AppProps = {
   dbName?: string;
@@ -56,9 +64,14 @@ function messageFromRestoreError(error: unknown): string {
 
 export function App({ dbName }: AppProps) {
   const store = useMemo(() => new IndexedDbRecordStore(dbName), [dbName]);
+  const repository = useMemo(() => new IndexedDbLendingRepository(store), [store]);
   const restoreInputRef = useRef<HTMLInputElement>(null);
   const [health, setHealth] = useState<StorageHealth>(initialHealth);
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [route, setRoute] = useState<Route>(() => parseHashRoute(window.location.hash));
+  const [borrowers, setBorrowers] = useState<Borrower[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [mode, setMode] = useState<"none" | "create-borrower" | "edit-borrower" | "create-loan">("none");
   const [backupPassphrase, setBackupPassphrase] = useState("");
   const [restorePassphrase, setRestorePassphrase] = useState("");
   const [message, setMessage] = useState("Ready");
@@ -67,9 +80,26 @@ export function App({ dbName }: AppProps) {
     setHealth(await store.getHealth());
   }, [store]);
 
+  const refreshLendingData = useCallback(async () => {
+    const [nextBorrowers, nextLoans] = await Promise.all([repository.listBorrowers(), repository.listLoans()]);
+    setBorrowers(nextBorrowers);
+    setLoans(nextLoans);
+  }, [repository]);
+
   useEffect(() => {
     void refreshHealth();
-  }, [refreshHealth]);
+    void refreshLendingData();
+  }, [refreshHealth, refreshLendingData]);
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(parseHashRoute(window.location.hash));
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    setMode("none");
+  }, [route]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -93,24 +123,65 @@ export function App({ dbName }: AppProps) {
     return () => window.removeEventListener("interest-manager:pwa-error", handlePwaError);
   }, []);
 
-  const addSmokeRecord = async () => {
-    const now = new Date().toISOString();
-    const record: GenericRecord = {
-      id: `system-smoke-${Date.now()}`,
-      type: "system.smoke",
-      createdAt: now,
-      updatedAt: now,
-      data: { note: "Storage smoke record" },
-    };
-    await store.upsertRecord(record);
-    setMessage("Smoke record saved");
-    await refreshHealth();
+  const navigate = useCallback((nextRoute: Route) => {
+    const hash = serializeHashRoute(nextRoute);
+    setRoute(nextRoute);
+    if (window.location.hash !== hash) {
+      window.location.hash = hash;
+    }
+  }, []);
+
+  const saveBorrower = async (value: Borrower) => {
+    await repository.saveBorrower(value);
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage(value.status === "archived" ? "Borrower archived" : "Borrower saved");
+    navigate({ name: "borrower", borrowerId: value.id });
   };
 
-  const clearRecords = async () => {
-    await store.clearRecords();
-    setMessage("Local records cleared");
-    await refreshHealth();
+  const saveLoan = async (input: LoanDraft) => {
+    const now = new Date().toISOString();
+    const loanId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
+    const loan: Loan = {
+      id: loanId,
+      borrowerId: input.borrowerId,
+      calculationModel: input.calculationModel,
+      originalPrincipal: input.originalPrincipal,
+      disbursementDate: input.disbursementDate,
+      monthlyDueDay: input.monthlyDueDay,
+      maturityDate: input.maturityDate,
+      rateValue: input.rateValue,
+      rateUnit: input.rateUnit,
+      partialPeriodInterestMode: input.partialPeriodInterestMode,
+      defaultScheduleVersionId: versionId,
+      reminderOverride: input.reminderOverride,
+      status: "active",
+      note: input.note,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const version: ScheduleVersion = {
+      id: versionId,
+      loanId,
+      versionNumber: 1,
+      effectiveDate: input.disbursementDate,
+      calculationModel: input.calculationModel,
+      principalBase: input.originalPrincipal,
+      disbursementDate: input.disbursementDate,
+      monthlyDueDay: input.monthlyDueDay,
+      maturityDate: input.maturityDate,
+      rateValue: input.rateValue,
+      rateUnit: input.rateUnit,
+      partialPeriodInterestMode: input.partialPeriodInterestMode,
+      createdAt: now,
+    };
+
+    await repository.saveLoan(loan);
+    await repository.saveScheduleVersion(version);
+    await repository.saveScheduleEntries(generateSchedule(version));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Loan saved");
+    navigate({ name: "loan", loanId });
   };
 
   const exportBackup = async () => {
@@ -143,7 +214,7 @@ export function App({ dbName }: AppProps) {
       }
       await store.replaceRecords(restored.records);
       setMessage("Backup restored");
-      await refreshHealth();
+      await Promise.all([refreshHealth(), refreshLendingData()]);
     } catch (error) {
       setMessage(messageFromRestoreError(error));
     } finally {
@@ -153,10 +224,60 @@ export function App({ dbName }: AppProps) {
     }
   };
 
+  const borrower = route.name === "borrower" ? borrowers.find((candidate) => candidate.id === route.borrowerId) : undefined;
+  const loan = route.name === "loan" ? loans.find((candidate) => candidate.id === route.loanId) : undefined;
+
+  const routeContent = (() => {
+    if (route.name === "settings") {
+      return (
+        <section className="operations-grid" aria-label="Backup and restore">
+          <div className="operation-panel">
+            <h2>Backup</h2>
+            <Field label="Backup passphrase" type="password" value={backupPassphrase} onChange={(event) => setBackupPassphrase(event.target.value)} />
+            <Button icon={<Archive aria-hidden="true" size={18} />} variant="primary" onClick={exportBackup}>Backup</Button>
+          </div>
+          <div className="operation-panel">
+            <h2>Restore</h2>
+            <Field label="Restore passphrase" type="password" value={restorePassphrase} onChange={(event) => setRestorePassphrase(event.target.value)} />
+            <input ref={restoreInputRef} aria-label="Backup file" className="file-input" type="file" accept="application/json,.json" onChange={(event) => void restoreBackupFile(event.target.files?.[0])} />
+            <Button icon={<FileUp aria-hidden="true" size={18} />} onClick={() => restoreInputRef.current?.click()}>Restore</Button>
+          </div>
+        </section>
+      );
+    }
+    if (route.name === "borrower") {
+      if (!borrower) {
+        return <section className="route-panel"><h2>Borrower not found</h2><Button onClick={() => navigate({ name: "dashboard" })}>Borrowers</Button></section>;
+      }
+      if (mode === "edit-borrower") {
+        return <section className="route-panel"><h2>Edit borrower</h2><BorrowerForm value={borrower} onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
+      }
+      if (mode === "create-loan") {
+        return <LoanForm borrowerId={borrower.id} onSave={saveLoan} onCancel={() => setMode("none")} />;
+      }
+      return <BorrowerDetail borrower={borrower} loans={loans.filter((candidate) => candidate.borrowerId === borrower.id)} onBack={() => navigate({ name: "dashboard" })} onEdit={() => setMode("edit-borrower")} onCreateLoan={() => setMode("create-loan")} onSelectLoan={(loanId) => navigate({ name: "loan", loanId })} />;
+    }
+    if (route.name === "loan") {
+      if (!loan) {
+        return <section className="route-panel"><h2>Loan not found</h2><Button onClick={() => navigate({ name: "dashboard" })}>Borrowers</Button></section>;
+      }
+      const loanBorrower = borrowers.find((candidate) => candidate.id === loan.borrowerId);
+      return <section className="route-panel" aria-labelledby="loan-detail-heading"><Button onClick={() => navigate({ name: "borrower", borrowerId: loan.borrowerId })}>Borrower</Button><h2 id="loan-detail-heading">Loan details</h2><p>{loanBorrower?.displayName ?? "Unknown borrower"}</p><p>{formatMoneyVnd(loan.originalPrincipal)}</p><p>{loan.disbursementDate} to {loan.maturityDate}</p></section>;
+    }
+    if (mode === "create-borrower") {
+      return <section className="route-panel"><h2>New borrower</h2><BorrowerForm onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
+    }
+    return <section className="route-panel" aria-labelledby="borrowers-heading"><div className="route-heading"><h2 id="borrowers-heading">Borrowers</h2><Button icon={<Plus aria-hidden="true" size={18} />} variant="primary" onClick={() => setMode("create-borrower")}>New borrower</Button></div><BorrowerList borrowers={borrowers} onSelect={(borrowerId) => navigate({ name: "borrower", borrowerId })} /></section>;
+  })();
+
   return (
     <main className="app-shell">
       <section className="hero-band">
         <h1>Interest Manager</h1>
+        <nav className="app-nav" aria-label="Primary navigation">
+          <a href={serializeHashRoute({ name: "dashboard" })}>Home</a>
+          <a href={serializeHashRoute({ name: "settings" })}>Settings</a>
+        </nav>
       </section>
 
       <section className="status-strip" aria-label="System status">
@@ -166,53 +287,7 @@ export function App({ dbName }: AppProps) {
         <span className="status-message">{message}</span>
       </section>
 
-      <section className="operations-grid" aria-label="Base operations">
-        <div className="operation-panel">
-          <h2>Storage</h2>
-          <div className="button-row">
-            <Button icon={<Plus aria-hidden="true" size={18} />} onClick={addSmokeRecord}>
-              Add smoke record
-            </Button>
-            <Button icon={<Trash2 aria-hidden="true" size={18} />} variant="danger" onClick={clearRecords}>
-              Clear
-            </Button>
-          </div>
-        </div>
-
-        <div className="operation-panel">
-          <h2>Backup</h2>
-          <Field
-            label="Backup passphrase"
-            type="password"
-            value={backupPassphrase}
-            onChange={(event) => setBackupPassphrase(event.target.value)}
-          />
-          <Button icon={<Archive aria-hidden="true" size={18} />} variant="primary" onClick={exportBackup}>
-            Backup
-          </Button>
-        </div>
-
-        <div className="operation-panel">
-          <h2>Restore</h2>
-          <Field
-            label="Restore passphrase"
-            type="password"
-            value={restorePassphrase}
-            onChange={(event) => setRestorePassphrase(event.target.value)}
-          />
-          <input
-            ref={restoreInputRef}
-            aria-label="Backup file"
-            className="file-input"
-            type="file"
-            accept="application/json,.json"
-            onChange={(event) => void restoreBackupFile(event.target.files?.[0])}
-          />
-          <Button icon={<FileUp aria-hidden="true" size={18} />} onClick={() => restoreInputRef.current?.click()}>
-            Restore
-          </Button>
-        </div>
-      </section>
+      {routeContent}
     </main>
   );
 }

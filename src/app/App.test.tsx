@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createEncryptedBackup } from "../backup/backupService";
 import type { GenericRecord } from "../backup/types";
+import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
+import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
 import { App } from "./App";
 
 let dbCounter = 0;
@@ -13,14 +15,14 @@ function nextDbName(): string {
 }
 
 describe("App", () => {
-  it("shows storage health and base actions", async () => {
+  it("uses the dashboard as the first borrower-management route", async () => {
     render(<App dbName={nextDbName()} />);
 
     expect(screen.getByRole("heading", { name: "Interest Manager" })).toBeInTheDocument();
     expect(screen.getByText("Online")).toBeInTheDocument();
     expect(await screen.findByText("Storage ready")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Backup" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Borrowers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New borrower" })).toBeInTheDocument();
   });
 
   it("updates the connection status when the browser goes offline and online", async () => {
@@ -37,13 +39,16 @@ describe("App", () => {
     expect(await screen.findByText("Online")).toBeInTheDocument();
   });
 
-  it("creates a smoke record and updates the record count", async () => {
+  it("creates a borrower and navigates to its persisted detail route", async () => {
     const user = userEvent.setup();
     render(<App dbName={nextDbName()} />);
 
-    await user.click(screen.getByRole("button", { name: "Add smoke record" }));
+    await user.click(screen.getByRole("button", { name: "New borrower" }));
+    await user.type(screen.getByLabelText("Display name"), "Tran Thi B");
+    await user.click(screen.getByRole("button", { name: "Save borrower" }));
 
-    await waitFor(() => expect(screen.getByText("1 record")).toBeInTheDocument());
+    expect(await screen.findByRole("heading", { name: "Tran Thi B" })).toBeInTheDocument();
+    expect(window.location.hash).toMatch(/^#\/borrowers\//);
   });
 
   it("downloads an encrypted backup when a passphrase is provided", async () => {
@@ -52,6 +57,8 @@ describe("App", () => {
     let createdAnchor: HTMLAnchorElement | undefined;
 
     render(<App dbName={nextDbName()} />);
+
+    await user.click(screen.getByRole("link", { name: "Settings" }));
 
     const createElement = vi.spyOn(document, "createElement");
     createElement.mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
@@ -92,11 +99,68 @@ describe("App", () => {
 
     render(<App dbName={nextDbName()} />);
 
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+
     await user.type(screen.getByLabelText("Restore passphrase"), "safe passphrase");
     await user.upload(screen.getByLabelText("Backup file"), file);
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith("Replace local records with this backup?"));
     await waitFor(() => expect(screen.getByText("1 record")).toBeInTheDocument());
     vi.unstubAllGlobals();
+  });
+
+  it("loads borrower records after a hash-route reload", async () => {
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const borrower = {
+      id: "borrower / one",
+      displayName: "Le Van C",
+      status: "active" as const,
+      createdAt: "2026-06-20T00:00:00.000Z",
+      updatedAt: "2026-06-20T00:00:00.000Z",
+    };
+    await repository.saveBorrower(borrower);
+    window.location.hash = "#/borrowers/borrower%20%2F%20one";
+
+    const first = render(<App dbName={dbName} />);
+    expect(await screen.findByRole("heading", { name: "Le Van C" })).toBeInTheDocument();
+    first.unmount();
+
+    render(<App dbName={dbName} />);
+    expect(await screen.findByRole("heading", { name: "Le Van C" })).toBeInTheDocument();
+  });
+
+  it("saves a loan, its first version, and generated entries from the confirmed preview", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const borrower = {
+      id: "borrower-1",
+      displayName: "Pham Thi D",
+      status: "active" as const,
+      createdAt: "2026-06-20T00:00:00.000Z",
+      updatedAt: "2026-06-20T00:00:00.000Z",
+    };
+    await repository.saveBorrower(borrower);
+    window.location.hash = "#/borrowers/borrower-1";
+    render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Pham Thi D" });
+    await user.click(screen.getByRole("button", { name: "New loan" }));
+    await user.type(screen.getByLabelText("Principal (VND)"), "10000000");
+    await user.type(screen.getByLabelText("Disbursement date"), "2026-06-20");
+    await user.selectOptions(screen.getByLabelText("Calculation model"), "equal-principal-flat-interest");
+    await user.clear(screen.getByLabelText("Monthly due day"));
+    await user.type(screen.getByLabelText("Monthly due day"), "5");
+    await user.type(screen.getByLabelText("Maturity date"), "2026-12-15");
+    await user.type(screen.getByLabelText("Rate (%)"), "2");
+    await user.click(screen.getByRole("button", { name: "Preview schedule" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm and save loan" }));
+
+    expect(await screen.findByRole("heading", { name: "Loan details" })).toBeInTheDocument();
+    const [loan] = await repository.listLoans(borrower.id);
+    const [version] = await repository.listScheduleVersions(loan.id);
+    expect(loan.defaultScheduleVersionId).toBe(version.id);
+    await expect(repository.listScheduleEntries(version.id)).resolves.toHaveLength(6);
   });
 });
