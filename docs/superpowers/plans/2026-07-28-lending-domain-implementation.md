@@ -345,6 +345,7 @@ calculateEntryStatus(input: {
   today: DateOnly;
 }): EntryStatus
 calculateLoanSummary(input: {
+  loanId: string;
   entries: ScheduleEntry[];
   payments: PaymentTransaction[];
   promises: PromiseToPay[];
