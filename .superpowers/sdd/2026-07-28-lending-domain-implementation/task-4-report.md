@@ -19,3 +19,20 @@
 ## Concerns
 
 - `ScheduleEntry` does not include `loanId`, and `calculateLoanSummary` receives no loan ID. The summary therefore derives `loanId` from the first payment or promise, returning an empty string when neither exists. A future contract revision should include `loanId` in the summary input if summaries for untouched loans must carry an ID.
+
+## Loan ID Fix
+
+The approved contract now requires `loanId` in `calculateLoanSummary(input)`. The summary returns that supplied ID directly and no longer infers identity from payment or promise history. Added a regression test for an active loan with entries but no payments or promises.
+
+### Commands and Output
+
+- `npm test -- src/lending/domain/ledger.test.ts src/lending/domain/revisions.test.ts`
+  - 2 files passed, 12 tests passed.
+- `npm run typecheck`
+  - `tsc --noEmit` completed successfully.
+- `npm test`
+  - 11 files passed, 63 tests passed.
+
+### Remaining Concerns
+
+None.

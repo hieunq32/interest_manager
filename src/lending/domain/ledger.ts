@@ -84,6 +84,7 @@ export function calculateEntryStatus(input: {
 }
 
 export function calculateLoanSummary(input: {
+  loanId: string;
   entries: ScheduleEntry[];
   payments: PaymentTransaction[];
   promises: PromiseToPay[];
@@ -123,7 +124,7 @@ export function calculateLoanSummary(input: {
   }
 
   return {
-    loanId: input.payments[0]?.loanId ?? input.promises[0]?.loanId ?? "",
+    loanId: input.loanId,
     outstandingPrincipal,
     outstandingInterest,
     dueToday,

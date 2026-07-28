@@ -88,6 +88,7 @@ describe("loan summaries", () => {
 
     expect(
       calculateLoanSummary({
+        loanId: "loan-1",
         entries,
         payments: [
           payment({ scheduleEntryId: "overdue", principalAmount: 500, interestAmount: 50 }),
@@ -105,5 +106,17 @@ describe("loan summaries", () => {
       overdue: 0,
       nextDueDate: "2026-07-10",
     });
+  });
+
+  it("retains the supplied loan ID when the loan has no payments or promises", () => {
+    expect(
+      calculateLoanSummary({
+        loanId: "loan-without-transactions",
+        entries: [entry({ dueDate: "2026-07-12" })],
+        payments: [],
+        promises: [],
+        today: "2026-07-10",
+      }),
+    ).toMatchObject({ loanId: "loan-without-transactions" });
   });
 });
