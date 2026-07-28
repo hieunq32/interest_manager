@@ -36,6 +36,10 @@ describe("lending interest calculations", () => {
     expect(calculateMonthlyProratedInterest(10_000_000, 0.02, "2026-04-20", "2026-05-05")).toBe(99_140);
   });
 
+  it("prorates monthly interest within the maximum supported year", () => {
+    expect(calculateMonthlyProratedInterest(10_000_000, 0.02, "9999-12-01", "9999-12-15")).toBe(90_323);
+  });
+
   it("calculates daily interest from actual calendar days", () => {
     expect(
       calculatePeriodInterest({

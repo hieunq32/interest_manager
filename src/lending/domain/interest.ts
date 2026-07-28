@@ -29,9 +29,12 @@ function assertValidPeriod(periodStart: DateOnly, periodEnd: DateOnly): void {
   }
 }
 
-function nextMonthStart(date: DateOnly): DateOnly {
+function nextMonthStart(date: DateOnly): DateOnly | undefined {
   const year = Number(date.slice(0, 4));
   const month = Number(date.slice(5, 7));
+  if (year === 9999 && month === 12) {
+    return undefined;
+  }
   if (month === 12) {
     return `${String(year + 1).padStart(4, "0")}-01-01`;
   }
@@ -52,7 +55,7 @@ export function calculateMonthlyProratedInterest(
   let unroundedInterest = 0;
   while (compareDateOnly(cursor, periodEnd) < 0) {
     const monthEnd = nextMonthStart(cursor);
-    const segmentEnd = compareDateOnly(monthEnd, periodEnd) < 0 ? monthEnd : periodEnd;
+    const segmentEnd = monthEnd !== undefined && compareDateOnly(monthEnd, periodEnd) < 0 ? monthEnd : periodEnd;
     const segmentDays = differenceInCalendarDays(cursor, segmentEnd);
     const monthDays = daysInMonth(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)));
     unroundedInterest += principalBase * monthlyRate * segmentDays / monthDays;
