@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Interest Manager</title>
+  <rect width="512" height="512" rx="96" fill="#17201a"/>
+  <circle cx="256" cy="256" r="164" fill="#f6f7f3"/>
+  <path d="M176 300c28 44 132 44 160 0" fill="none" stroke="#1f6f50" stroke-width="34" stroke-linecap="round"/>
+  <path d="M184 212h144c22 0 40 18 40 40s-18 40-40 40H184z" fill="#d9b44a"/>
+  <path d="M184 212v80" stroke="#17201a" stroke-width="22" stroke-linecap="round"/>
+</svg>
