@@ -176,9 +176,7 @@ export function App({ dbName }: AppProps) {
       createdAt: now,
     };
 
-    await repository.saveLoan(loan);
-    await repository.saveScheduleVersion(version);
-    await repository.saveScheduleEntries(generateSchedule(version));
+    await repository.saveLoanBundle({ loan, version, entries: generateSchedule(version) });
     await Promise.all([refreshHealth(), refreshLendingData()]);
     setMessage("Loan saved");
     navigate({ name: "loan", loanId });

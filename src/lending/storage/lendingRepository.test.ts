@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GenericRecord } from "../../backup/types";
 import type {
   Borrower,
@@ -189,6 +189,32 @@ describe("IndexedDbLendingRepository", () => {
 
     await repository.saveScheduleEntries([replacementEntry]);
 
+    await expect(repository.listScheduleEntries(version.id)).resolves.toEqual([replacementEntry, secondEntry]);
+  });
+
+  it("saves and replaces a complete loan bundle with one record-store batch", async () => {
+    const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
+    const repository = new IndexedDbLendingRepository(store);
+    const replacementLoan: Loan = { ...loan, note: "Updated onboarding note", updatedAt: "2026-07-28T02:00:00.000Z" };
+    const replacementVersion: ScheduleVersion = { ...version, rateValue: 0.025 };
+    const replacementEntry: ScheduleEntry = {
+      ...entry,
+      expectedInterest: 250_000,
+      updatedAt: "2026-07-28T02:00:00.000Z",
+    };
+    const upsertRecords = vi.spyOn(store, "upsertRecords");
+
+    await repository.saveLoanBundle({ loan, version, entries: [entry, secondEntry] });
+    await repository.saveLoanBundle({
+      loan: replacementLoan,
+      version: replacementVersion,
+      entries: [replacementEntry, secondEntry],
+    });
+
+    expect(upsertRecords).toHaveBeenCalledTimes(2);
+    expect(upsertRecords.mock.calls[0][0]).toHaveLength(4);
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([replacementLoan]);
+    await expect(repository.listScheduleVersions(loan.id)).resolves.toEqual([replacementVersion]);
     await expect(repository.listScheduleEntries(version.id)).resolves.toEqual([replacementEntry, secondEntry]);
   });
 

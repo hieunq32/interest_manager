@@ -35,3 +35,32 @@
 ## Concerns
 
 - The existing repository exposes individual save methods, so onboarding writes loan, version, then entries in sequence. A future repository-level transaction API would provide all-or-nothing persistence for storage failures between those calls.
+
+## Fix: Atomic Loan Onboarding
+
+### Changes
+
+- Added `IndexedDbLendingRepository.saveLoanBundle({ loan, version, entries })`.
+- The bundle converts all three lending record types and sends them through one `IndexedDbRecordStore.upsertRecords` call, which performs one IndexedDB read-write transaction.
+- Updated confirmed loan onboarding to call `saveLoanBundle` once; borrower saves remain independent.
+- Added repository coverage for saving and replacing a complete bundle, including the single batch call.
+- Updated the App integration test to prove confirmation calls `saveLoanBundle` and does not call the separate loan, version, or entry save methods.
+
+### TDD Evidence
+
+1. Added the repository bundle test first; it failed with `repository.saveLoanBundle is not a function`.
+2. Implemented the repository method via `upsertRecords`; the repository suite then passed 4 tests.
+3. Strengthened the existing confirmation integration test with bundle-method and no-sequential-save assertions; it failed because the App made no bundle call.
+4. Replaced the sequential App writes with one `saveLoanBundle` call; the repository and App suites passed.
+
+### Commands and Output
+
+- `npm test -- src/app/routes.test.ts src/lending/ui/lendingFlow.test.tsx src/lending/storage/lendingRepository.test.ts src/app/App.test.tsx`: 4 files, 21 tests passed.
+- `npm run typecheck`: passed.
+- `npm test`: 16 files, 99 tests passed.
+- `npm run build`: passed.
+- `git diff --check`: passed.
+
+### Concern Resolution
+
+- The sequential-write concern is resolved for initial loan onboarding. The entire loan, first version, and generated entry set now commit in one record-store transaction.

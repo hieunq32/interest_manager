@@ -18,11 +18,18 @@ import {
   isLendingRecordType,
 } from "./recordTypes";
 
+export interface LoanBundle {
+  loan: Loan;
+  version: ScheduleVersion;
+  entries: ScheduleEntry[];
+}
+
 export interface LendingRepository {
   listBorrowers(): Promise<Borrower[]>;
   saveBorrower(value: Borrower): Promise<void>;
   listLoans(borrowerId?: string): Promise<Loan[]>;
   saveLoan(value: Loan): Promise<void>;
+  saveLoanBundle(value: LoanBundle): Promise<void>;
   listScheduleVersions(loanId?: string): Promise<ScheduleVersion[]>;
   saveScheduleVersion(value: ScheduleVersion): Promise<void>;
   listScheduleEntries(scheduleVersionId?: string): Promise<ScheduleEntry[]>;
@@ -72,6 +79,14 @@ export class IndexedDbLendingRepository implements LendingRepository {
 
   async saveLoan(value: Loan): Promise<void> {
     await this.store.upsertRecord(toGenericRecord(LENDING_RECORD_TYPES.loan, value));
+  }
+
+  async saveLoanBundle({ loan, version, entries }: LoanBundle): Promise<void> {
+    await this.store.upsertRecords([
+      toGenericRecord(LENDING_RECORD_TYPES.loan, loan),
+      toGenericRecord(LENDING_RECORD_TYPES.scheduleVersion, version),
+      ...entries.map((entry) => toGenericRecord(LENDING_RECORD_TYPES.scheduleEntry, entry)),
+    ]);
   }
 
   async listScheduleVersions(loanId?: string): Promise<ScheduleVersion[]> {

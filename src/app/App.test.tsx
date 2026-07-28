@@ -142,6 +142,10 @@ describe("App", () => {
       updatedAt: "2026-06-20T00:00:00.000Z",
     };
     await repository.saveBorrower(borrower);
+    const saveLoanBundle = vi.spyOn(IndexedDbLendingRepository.prototype, "saveLoanBundle");
+    const saveLoan = vi.spyOn(IndexedDbLendingRepository.prototype, "saveLoan");
+    const saveScheduleVersion = vi.spyOn(IndexedDbLendingRepository.prototype, "saveScheduleVersion");
+    const saveScheduleEntries = vi.spyOn(IndexedDbLendingRepository.prototype, "saveScheduleEntries");
     window.location.hash = "#/borrowers/borrower-1";
     render(<App dbName={dbName} />);
 
@@ -162,5 +166,10 @@ describe("App", () => {
     const [version] = await repository.listScheduleVersions(loan.id);
     expect(loan.defaultScheduleVersionId).toBe(version.id);
     await expect(repository.listScheduleEntries(version.id)).resolves.toHaveLength(6);
+    expect(saveLoanBundle).toHaveBeenCalledTimes(1);
+    expect(saveLoan).not.toHaveBeenCalled();
+    expect(saveScheduleVersion).not.toHaveBeenCalled();
+    expect(saveScheduleEntries).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 });
