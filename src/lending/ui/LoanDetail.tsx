@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { calculateEntryStatus, calculateEntryTotals, calculateLoanSummary } from "../domain/ledger";
 import type { RevisionInput } from "../domain/revisions";
 import type { Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../domain/types";
@@ -51,11 +51,7 @@ export function LoanDetail({
   const [entryForm, setEntryForm] = useState<EntryForm>();
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const activeVersion = versions.find((version) => version.id === loan.defaultScheduleVersionId);
-  const activeEntries = useMemo(
-    () => entries.filter((entry) => entry.scheduleVersionId === loan.defaultScheduleVersionId),
-    [entries, loan.defaultScheduleVersionId],
-  );
-  const summary = calculateLoanSummary({ loanId: loan.id, entries: activeEntries, payments, promises, today });
+  const summary = calculateLoanSummary({ loanId: loan.id, entries, payments, promises, today });
   const calendarState = calendarExportVersionId === loan.defaultScheduleVersionId
     ? "Calendar export matches the active schedule."
     : calendarExportVersionId

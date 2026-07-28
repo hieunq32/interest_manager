@@ -48,3 +48,23 @@ Completed in `C:\SourceCode\interest_manager\.worktrees\lending-domain`.
 - Revision persistence writes a new version and new entries, does not overwrite old entries or payments, and explicitly updates only the loan's active-version pointer plus audit timestamp.
 - No runtime dependencies were added.
 - No dashboard/settings or browser `.ics` download polish was implemented; Calendar file download remains Task 9 scope. Task 8 persists and exposes the re-export state/action.
+
+## Fix Round 1
+
+### Reviewer Findings Addressed
+
+1. The loan-detail summary now passes all loan schedule entries to `calculateLoanSummary`. Schedule rows stay grouped into active and read-only historical versions, while payments on immutable historical entries reduce the combined displayed balance.
+2. `App` now builds reminder events with `buildScheduleCalendarEvents`, serializes them with `buildIcsCalendar`, and passes `{ content, loanId, scheduleVersionId }` to the optional `onCalendarExport` Task 9 download boundary before persisting the export version. A preparation or boundary failure sets `Calendar export could not be prepared` and does not mark the export current.
+3. Revisions now persist the revised loan pointer, new schedule version, and generated entries with `saveLoanBundle`. The existing bundle transaction retains prior versions and entries unchanged.
+
+### Regression Coverage
+
+- `LoanDetail.test.tsx` now proves combined principal and interest balances and overdue counts include the paid pre-revision entry alongside the active schedule.
+- `App.test.tsx` now records a payment, creates a later-effective revision, verifies the combined remaining principal, verifies the prepared `VCALENDAR` payload and active version metadata at the calendar boundary, proves a fully paid future entry is excluded from the export, and proves the revision calls only `saveLoanBundle` rather than individual loan/version/entry saves.
+
+### Commands And Results
+
+- `npm test -- --run src/lending/ui/PaymentForm.test.tsx src/lending/ui/PromiseForm.test.tsx src/lending/ui/ScheduleRevisionForm.test.tsx src/lending/ui/LoanDetail.test.tsx src/app/App.test.tsx`: 5 files, 15 tests passed.
+- `npm run typecheck`: passed (`tsc --noEmit`).
+- `npm test`: 20 files, 107 tests passed.
+- `npm run build`: passed; Vite generated the production bundle, PWA manifest, and service worker.

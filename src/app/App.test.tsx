@@ -176,6 +176,7 @@ describe("App", () => {
 
   it("persists a payment and a revision from the loan detail workflow", async () => {
     const user = userEvent.setup();
+    const onCalendarExport = vi.fn().mockResolvedValue(undefined);
     const dbName = nextDbName();
     const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
     const borrower = {
@@ -220,7 +221,7 @@ describe("App", () => {
       id: "entry-detail-1",
       scheduleVersionId: version.id,
       periodStart: "2026-06-20",
-      dueDate: "2026-07-05",
+      dueDate: "2026-08-05",
       expectedPrincipal: 1_000_000,
       expectedInterest: 20_000,
       status: "upcoming",
@@ -230,20 +231,35 @@ describe("App", () => {
     await repository.saveBorrower(borrower);
     await repository.saveLoanBundle({ loan, version, entries: [entry] });
     window.location.hash = "#/loans/loan-detail-1";
-    render(<App dbName={dbName} />);
+    render(<App dbName={dbName} onCalendarExport={onCalendarExport} />);
 
     await screen.findByRole("heading", { name: "Loan details" });
     await user.click(screen.getByRole("button", { name: "Export Calendar" }));
     await screen.findByText("Calendar export marked current");
+    expect(onCalendarExport).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.stringContaining("BEGIN:VCALENDAR"),
+      loanId: loan.id,
+      scheduleVersionId: version.id,
+    }));
     expect(await repository.listLoans(borrower.id)).toEqual([expect.objectContaining({ calendarExportVersionId: version.id })]);
     await user.click(screen.getByRole("button", { name: "Record payment" }));
-    await user.type(screen.getByLabelText("Received date"), "2026-07-05");
-    await user.type(screen.getByLabelText("Principal received (VND)"), "800000");
+    await user.type(screen.getByLabelText("Received date"), "2026-07-29");
+    await user.type(screen.getByLabelText("Principal received (VND)"), "1000000");
+    await user.type(screen.getByLabelText("Interest received (VND)"), "20000");
     await user.click(screen.getByRole("button", { name: "Save payment" }));
     await screen.findByText("Payment recorded");
-    expect(await repository.listPayments(loan.id)).toEqual([expect.objectContaining({ principalAmount: 800_000, interestAmount: 0 })]);
+    expect(await repository.listPayments(loan.id)).toEqual([expect.objectContaining({ principalAmount: 1_000_000, interestAmount: 20_000 })]);
+    await user.click(screen.getByRole("button", { name: "Export Calendar" }));
+    await waitFor(() => expect(onCalendarExport).toHaveBeenCalledTimes(2));
+    expect(onCalendarExport.mock.calls[1][0].content).not.toContain("BEGIN:VEVENT");
 
+    const saveLoanBundle = vi.spyOn(IndexedDbLendingRepository.prototype, "saveLoanBundle");
+    const saveLoan = vi.spyOn(IndexedDbLendingRepository.prototype, "saveLoan");
+    const saveScheduleVersion = vi.spyOn(IndexedDbLendingRepository.prototype, "saveScheduleVersion");
+    const saveScheduleEntries = vi.spyOn(IndexedDbLendingRepository.prototype, "saveScheduleEntries");
     await user.click(screen.getByRole("button", { name: "Revise schedule" }));
+    await user.clear(screen.getByLabelText("Effective date"));
+    await user.type(screen.getByLabelText("Effective date"), "2026-08-01");
     await user.clear(screen.getByLabelText("Maturity date"));
     await user.type(screen.getByLabelText("Maturity date"), "2027-01-15");
     await user.click(screen.getByRole("button", { name: "Save revision" }));
@@ -253,5 +269,11 @@ describe("App", () => {
     expect(updatedLoan.defaultScheduleVersionId).not.toBe(version.id);
     expect(updatedLoan.calendarExportVersionId).toBe(version.id);
     expect(await repository.listScheduleEntries(version.id)).toEqual([entry]);
+    expect(screen.getByText("Outstanding principal: 1,000,000 VND")).toBeInTheDocument();
+    expect(saveLoanBundle).toHaveBeenCalledTimes(1);
+    expect(saveLoan).not.toHaveBeenCalled();
+    expect(saveScheduleVersion).not.toHaveBeenCalled();
+    expect(saveScheduleEntries).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 });

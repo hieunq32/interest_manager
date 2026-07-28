@@ -1,9 +1,12 @@
 import { Archive, FileUp, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEncryptedBackup, restoreEncryptedBackup } from "../backup/backupService";
+import { calculateEntryStatus } from "../lending/domain/ledger";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
 import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
+import { buildIcsCalendar, buildScheduleCalendarEvents } from "../lending/reminders/ical";
+import { DEFAULT_REMINDER_SETTINGS, resolveReminderSettings } from "../lending/reminders/reminderSettings";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
 import { BorrowerDetail } from "../lending/ui/BorrowerDetail";
 import { BorrowerForm } from "../lending/ui/BorrowerForm";
@@ -21,7 +24,14 @@ import { parseHashRoute, serializeHashRoute, type Route } from "./routes";
 
 type AppProps = {
   dbName?: string;
+  onCalendarExport?(value: PreparedCalendarExport): Promise<void> | void;
 };
+
+export interface PreparedCalendarExport {
+  content: string;
+  loanId: string;
+  scheduleVersionId: string;
+}
 
 const initialHealth: StorageHealth = {
   available: false,
@@ -75,7 +85,7 @@ function todayInVietnam(): string {
   return `${valueFor("year")}-${valueFor("month")}-${valueFor("day")}`;
 }
 
-export function App({ dbName }: AppProps) {
+export function App({ dbName, onCalendarExport }: AppProps) {
   const store = useMemo(() => new IndexedDbRecordStore(dbName), [dbName]);
   const repository = useMemo(() => new IndexedDbLendingRepository(store), [store]);
   const restoreInputRef = useRef<HTMLInputElement>(null);
@@ -230,12 +240,14 @@ export function App({ dbName }: AppProps) {
 
   const saveRevision = async (loanToRevise: Loan, input: RevisionInput) => {
     const revision = createScheduleRevision(input);
-    await repository.saveScheduleVersion(revision.version);
-    await repository.saveScheduleEntries(revision.entries);
-    await repository.saveLoan({
-      ...loanToRevise,
-      defaultScheduleVersionId: revision.activeScheduleVersionId,
-      updatedAt: input.createdAt,
+    await repository.saveLoanBundle({
+      version: revision.version,
+      entries: revision.entries,
+      loan: {
+        ...loanToRevise,
+        defaultScheduleVersionId: revision.activeScheduleVersionId,
+        updatedAt: input.createdAt,
+      },
     });
     await Promise.all([refreshHealth(), refreshLendingData()]);
     setMessage("Schedule revised; Calendar export is stale");
@@ -249,6 +261,41 @@ export function App({ dbName }: AppProps) {
     });
     await Promise.all([refreshHealth(), refreshLendingData()]);
     setMessage("Calendar export marked current");
+  };
+
+  const prepareCalendarExport = async (input: {
+    loan: Loan;
+    borrowerName: string;
+    entries: ScheduleEntry[];
+    payments: PaymentTransaction[];
+    promises: PromiseToPay[];
+  }) => {
+    try {
+      const globalSettings = await repository.getReminderSettings() ?? DEFAULT_REMINDER_SETTINGS;
+      const today = todayInVietnam();
+      const entries = input.entries
+        .filter((entry) => entry.scheduleVersionId === input.loan.defaultScheduleVersionId)
+        .map((entry) => ({
+          ...entry,
+          status: calculateEntryStatus({ entry, payments: input.payments, promises: input.promises, today }),
+        }));
+      const content = buildIcsCalendar(buildScheduleCalendarEvents({
+        entries,
+        promises: input.promises,
+        borrowerName: input.borrowerName,
+        loanLabel: `Loan ${input.loan.id}`,
+        settings: resolveReminderSettings(globalSettings, input.loan.reminderOverride),
+        today,
+      }));
+      await onCalendarExport?.({
+        content,
+        loanId: input.loan.id,
+        scheduleVersionId: input.loan.defaultScheduleVersionId,
+      });
+      await markCalendarExportCurrent(input.loan, input.loan.defaultScheduleVersionId);
+    } catch {
+      setMessage("Calendar export could not be prepared");
+    }
   };
 
   const exportBackup = async () => {
@@ -345,7 +392,13 @@ export function App({ dbName }: AppProps) {
         onSavePromise={savePromise}
         onUpdatePromise={updatePromise}
         onSaveRevision={(input) => saveRevision(loan, input)}
-        onExportCalendar={(versionId) => void markCalendarExportCurrent(loan, versionId)}
+        onExportCalendar={() => void prepareCalendarExport({
+          loan,
+          borrowerName: loanBorrower?.displayName ?? "Unknown borrower",
+          entries: scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId)),
+          payments: payments.filter((payment) => payment.loanId === loan.id),
+          promises: promises.filter((promise) => promise.loanId === loan.id),
+        })}
       />;
     }
     if (mode === "create-borrower") {
