@@ -44,6 +44,7 @@ export interface Loan {
   rateUnit: RateUnit;
   partialPeriodInterestMode: PartialPeriodInterestMode;
   defaultScheduleVersionId: string;
+  calendarExportVersionId?: string;
   reminderOverride?: ReminderOverride;
   status: LoanStatus;
   note?: string;

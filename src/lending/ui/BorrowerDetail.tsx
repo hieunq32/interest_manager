@@ -30,8 +30,8 @@ export function BorrowerDetail({ borrower, loans, onBack, onEdit, onCreateLoan, 
           {loans.map((loan) => (
             <li key={loan.id}>
               <button className="loan-link" type="button" onClick={() => onSelectLoan(loan.id)}>
-                <span>{formatMoneyVnd(loan.originalPrincipal)}</span>
-                <span>{loan.disbursementDate} to {loan.maturityDate}</span>
+                <span>Loan: {formatMoneyVnd(loan.originalPrincipal)}</span>
+                <span>{loan.disbursementDate} to {loan.maturityDate} ({loan.status})</span>
               </button>
             </li>
           ))}

@@ -1,14 +1,16 @@
 import { Archive, FileUp, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEncryptedBackup, restoreEncryptedBackup } from "../backup/backupService";
+import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
-import type { Borrower, Loan, ScheduleVersion } from "../lending/domain/types";
+import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
 import { BorrowerDetail } from "../lending/ui/BorrowerDetail";
 import { BorrowerForm } from "../lending/ui/BorrowerForm";
 import { BorrowerList } from "../lending/ui/BorrowerList";
 import { formatMoneyVnd } from "../lending/ui/lendingLabels";
 import { LoanForm, type LoanDraft } from "../lending/ui/LoanForm";
+import { LoanDetail } from "../lending/ui/LoanDetail";
 import { AppError } from "../shared/errors";
 import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
 import type { StorageHealth } from "../storage/types";
@@ -62,6 +64,17 @@ function messageFromRestoreError(error: unknown): string {
   return "Restore failed";
 }
 
+function todayInVietnam(): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const valueFor = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${valueFor("year")}-${valueFor("month")}-${valueFor("day")}`;
+}
+
 export function App({ dbName }: AppProps) {
   const store = useMemo(() => new IndexedDbRecordStore(dbName), [dbName]);
   const repository = useMemo(() => new IndexedDbLendingRepository(store), [store]);
@@ -71,6 +84,10 @@ export function App({ dbName }: AppProps) {
   const [route, setRoute] = useState<Route>(() => parseHashRoute(window.location.hash));
   const [borrowers, setBorrowers] = useState<Borrower[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [scheduleVersions, setScheduleVersions] = useState<ScheduleVersion[]>([]);
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
+  const [payments, setPayments] = useState<PaymentTransaction[]>([]);
+  const [promises, setPromises] = useState<PromiseToPay[]>([]);
   const [mode, setMode] = useState<"none" | "create-borrower" | "edit-borrower" | "create-loan">("none");
   const [backupPassphrase, setBackupPassphrase] = useState("");
   const [restorePassphrase, setRestorePassphrase] = useState("");
@@ -81,9 +98,20 @@ export function App({ dbName }: AppProps) {
   }, [store]);
 
   const refreshLendingData = useCallback(async () => {
-    const [nextBorrowers, nextLoans] = await Promise.all([repository.listBorrowers(), repository.listLoans()]);
+    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPromises] = await Promise.all([
+      repository.listBorrowers(),
+      repository.listLoans(),
+      repository.listScheduleVersions(),
+      repository.listScheduleEntries(),
+      repository.listPayments(),
+      repository.listPromises(),
+    ]);
     setBorrowers(nextBorrowers);
     setLoans(nextLoans);
+    setScheduleVersions(nextVersions);
+    setScheduleEntries(nextEntries);
+    setPayments(nextPayments);
+    setPromises(nextPromises);
   }, [repository]);
 
   useEffect(() => {
@@ -182,6 +210,47 @@ export function App({ dbName }: AppProps) {
     navigate({ name: "loan", loanId });
   };
 
+  const savePayment = async (value: PaymentTransaction) => {
+    await repository.savePayment(value);
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Payment recorded");
+  };
+
+  const savePromise = async (value: PromiseToPay) => {
+    await repository.savePromise(value);
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Promise recorded");
+  };
+
+  const updatePromise = async (value: PromiseToPay) => {
+    await repository.savePromise(value);
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage(value.status === "fulfilled" ? "Promise fulfilled" : "Promise cancelled");
+  };
+
+  const saveRevision = async (loanToRevise: Loan, input: RevisionInput) => {
+    const revision = createScheduleRevision(input);
+    await repository.saveScheduleVersion(revision.version);
+    await repository.saveScheduleEntries(revision.entries);
+    await repository.saveLoan({
+      ...loanToRevise,
+      defaultScheduleVersionId: revision.activeScheduleVersionId,
+      updatedAt: input.createdAt,
+    });
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Schedule revised; Calendar export is stale");
+  };
+
+  const markCalendarExportCurrent = async (loanToUpdate: Loan, versionId: string) => {
+    await repository.saveLoan({
+      ...loanToUpdate,
+      calendarExportVersionId: versionId,
+      updatedAt: new Date().toISOString(),
+    });
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Calendar export marked current");
+  };
+
   const exportBackup = async () => {
     if (!backupPassphrase.trim()) {
       setMessage("Backup passphrase required");
@@ -260,7 +329,24 @@ export function App({ dbName }: AppProps) {
         return <section className="route-panel"><h2>Loan not found</h2><Button onClick={() => navigate({ name: "dashboard" })}>Borrowers</Button></section>;
       }
       const loanBorrower = borrowers.find((candidate) => candidate.id === loan.borrowerId);
-      return <section className="route-panel" aria-labelledby="loan-detail-heading"><Button onClick={() => navigate({ name: "borrower", borrowerId: loan.borrowerId })}>Borrower</Button><h2 id="loan-detail-heading">Loan details</h2><p>{loanBorrower?.displayName ?? "Unknown borrower"}</p><p>{formatMoneyVnd(loan.originalPrincipal)}</p><p>{loan.disbursementDate} to {loan.maturityDate}</p></section>;
+      const loanVersions = scheduleVersions.filter((version) => version.loanId === loan.id);
+      const loanVersionIds = new Set(loanVersions.map((version) => version.id));
+      return <LoanDetail
+        loan={loan}
+        borrowerName={loanBorrower?.displayName ?? "Unknown borrower"}
+        versions={loanVersions}
+        entries={scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId))}
+        payments={payments.filter((payment) => payment.loanId === loan.id)}
+        promises={promises.filter((promise) => promise.loanId === loan.id)}
+        today={todayInVietnam()}
+        calendarExportVersionId={loan.calendarExportVersionId}
+        onBack={() => navigate({ name: "borrower", borrowerId: loan.borrowerId })}
+        onSavePayment={savePayment}
+        onSavePromise={savePromise}
+        onUpdatePromise={updatePromise}
+        onSaveRevision={(input) => saveRevision(loan, input)}
+        onExportCalendar={(versionId) => void markCalendarExportCurrent(loan, versionId)}
+      />;
     }
     if (mode === "create-borrower") {
       return <section className="route-panel"><h2>New borrower</h2><BorrowerForm onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;

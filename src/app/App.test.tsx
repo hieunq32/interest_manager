@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createEncryptedBackup } from "../backup/backupService";
+import type { Loan, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import type { GenericRecord } from "../backup/types";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
 import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
@@ -171,5 +172,86 @@ describe("App", () => {
     expect(saveScheduleVersion).not.toHaveBeenCalled();
     expect(saveScheduleEntries).not.toHaveBeenCalled();
     vi.restoreAllMocks();
+  });
+
+  it("persists a payment and a revision from the loan detail workflow", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const borrower = {
+      id: "borrower-detail-1",
+      displayName: "Do Thi E",
+      status: "active" as const,
+      createdAt: "2026-06-20T00:00:00.000Z",
+      updatedAt: "2026-06-20T00:00:00.000Z",
+    };
+    const loan: Loan = {
+      id: "loan-detail-1",
+      borrowerId: borrower.id,
+      calculationModel: "equal-principal-flat-interest",
+      originalPrincipal: 1_000_000,
+      disbursementDate: "2026-06-20",
+      monthlyDueDay: 5,
+      maturityDate: "2026-12-15",
+      rateValue: 0.02,
+      rateUnit: "monthly",
+      partialPeriodInterestMode: "full-period",
+      defaultScheduleVersionId: "version-detail-1",
+      status: "active",
+      createdAt: borrower.createdAt,
+      updatedAt: borrower.updatedAt,
+    };
+    const version: ScheduleVersion = {
+      id: loan.defaultScheduleVersionId,
+      loanId: loan.id,
+      versionNumber: 1,
+      effectiveDate: loan.disbursementDate,
+      calculationModel: loan.calculationModel,
+      principalBase: loan.originalPrincipal,
+      disbursementDate: loan.disbursementDate,
+      monthlyDueDay: loan.monthlyDueDay,
+      maturityDate: loan.maturityDate,
+      rateValue: loan.rateValue,
+      rateUnit: loan.rateUnit,
+      partialPeriodInterestMode: loan.partialPeriodInterestMode,
+      createdAt: loan.createdAt,
+    };
+    const entry: ScheduleEntry = {
+      id: "entry-detail-1",
+      scheduleVersionId: version.id,
+      periodStart: "2026-06-20",
+      dueDate: "2026-07-05",
+      expectedPrincipal: 1_000_000,
+      expectedInterest: 20_000,
+      status: "upcoming",
+      createdAt: version.createdAt,
+      updatedAt: version.createdAt,
+    };
+    await repository.saveBorrower(borrower);
+    await repository.saveLoanBundle({ loan, version, entries: [entry] });
+    window.location.hash = "#/loans/loan-detail-1";
+    render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Loan details" });
+    await user.click(screen.getByRole("button", { name: "Export Calendar" }));
+    await screen.findByText("Calendar export marked current");
+    expect(await repository.listLoans(borrower.id)).toEqual([expect.objectContaining({ calendarExportVersionId: version.id })]);
+    await user.click(screen.getByRole("button", { name: "Record payment" }));
+    await user.type(screen.getByLabelText("Received date"), "2026-07-05");
+    await user.type(screen.getByLabelText("Principal received (VND)"), "800000");
+    await user.click(screen.getByRole("button", { name: "Save payment" }));
+    await screen.findByText("Payment recorded");
+    expect(await repository.listPayments(loan.id)).toEqual([expect.objectContaining({ principalAmount: 800_000, interestAmount: 0 })]);
+
+    await user.click(screen.getByRole("button", { name: "Revise schedule" }));
+    await user.clear(screen.getByLabelText("Maturity date"));
+    await user.type(screen.getByLabelText("Maturity date"), "2027-01-15");
+    await user.click(screen.getByRole("button", { name: "Save revision" }));
+    await screen.findByText("Schedule revised; Calendar export is stale");
+    await waitFor(async () => expect(await repository.listScheduleVersions(loan.id)).toHaveLength(2));
+    const [updatedLoan] = await repository.listLoans(borrower.id);
+    expect(updatedLoan.defaultScheduleVersionId).not.toBe(version.id);
+    expect(updatedLoan.calendarExportVersionId).toBe(version.id);
+    expect(await repository.listScheduleEntries(version.id)).toEqual([entry]);
   });
 });
