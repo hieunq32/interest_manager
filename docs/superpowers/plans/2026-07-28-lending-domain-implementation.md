@@ -302,6 +302,7 @@ Use deterministic entry IDs derived from the schedule version and due date, for 
 - [ ] Write failing day-31 tests for February, April, and leap February.
 - [ ] Implement date generation using the approved maturity-month rules: equal-principal schedules include regular dates only in months before the maturity month, then maturity once; interest-only schedules include regular interest dates before maturity and add maturity once, including a maturity-month due date only when it is earlier than maturity.
 - [ ] Use `effectiveDate` as the schedule-generation boundary for a version; the first version sets it to the disbursement date, and a revision generates only future entries strictly after its effective boundary. Use the boundary as the first period start and the previous due date thereafter.
+- [ ] The next period-start rule is for the initial version only; a revised version must use its `effectiveDate` boundary as specified above.
 - [ ] Implement period starts as disbursement date for the first entry and the previous due date thereafter. Calculate each entry’s expected interest through `calculatePeriodInterest`.
 - [ ] Initialize generated entries as `upcoming`; do not derive payment status inside the generator.
 - [ ] Run schedule tests, interest tests, full tests, and typecheck.
@@ -629,7 +630,7 @@ ReminderSettingsProps: {
 - [ ] Create borrower `Nguyen Van A`.
 - [ ] Create a 10,000,000 VND model-2 loan, disbursed `2026-06-20`, due day 5, maturity `2026-12-15`, rate 2% per month.
 - [ ] Confirm the preview and saved schedule dates are `2026-07-05`, `2026-08-05`, `2026-09-05`, `2026-10-05`, `2026-11-05`, and `2026-12-15`.
-- [ ] Confirm total expected principal is exactly 10,000,000 VND and total expected interest is six full monthly periods under the selected final-period mode.
+- [ ] Confirm total expected principal is exactly 10,000,000 VND and total expected interest contains six collection periods; full-period mode yields six full monthly charges, while calendar-day-prorated mode prorates the final `2026-11-05` to `2026-12-15` period.
 - [ ] Record a payment of 800,000 VND principal and 200,000 VND interest, then verify the two outstanding balances update independently.
 - [ ] Add a promise for `2026-09-17` with note `Mai tra`, then verify it appears in promises and does not reduce outstanding balances.
 - [ ] Move the app date/test fixture past the promise date and verify the entry displays overdue without generating repeated notifications.
