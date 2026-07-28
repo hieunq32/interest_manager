@@ -416,6 +416,11 @@ export interface LendingRepository {
   saveScheduleVersion(value: ScheduleVersion): Promise<void>;
   listScheduleEntries(scheduleVersionId?: string): Promise<ScheduleEntry[]>;
   saveScheduleEntries(values: ScheduleEntry[]): Promise<void>;
+  saveLoanBundle(input: {
+    loan: Loan;
+    version: ScheduleVersion;
+    entries: ScheduleEntry[];
+  }): Promise<void>;
   listPayments(loanId?: string): Promise<PaymentTransaction[]>;
   savePayment(value: PaymentTransaction): Promise<void>;
   listPromises(loanId?: string): Promise<PromiseToPay[]>;
@@ -495,7 +500,7 @@ buildScheduleCalendarEvents(input: {
 
 ### Task 7: Add Offline Routing, Borrower Management, and Loan Onboarding
 
-**Files:** Create `src/app/routes.ts`, `src/app/routes.test.ts`, `src/lending/ui/lendingLabels.ts`, `src/lending/ui/BorrowerList.tsx`, `src/lending/ui/BorrowerForm.tsx`, `src/lending/ui/BorrowerDetail.tsx`, `src/lending/ui/LoanForm.tsx`. Modify `src/app/App.tsx` and `src/app/App.test.tsx`.
+**Files:** Create `src/app/routes.ts`, `src/app/routes.test.ts`, `src/lending/ui/lendingLabels.ts`, `src/lending/ui/BorrowerList.tsx`, `src/lending/ui/BorrowerForm.tsx`, `src/lending/ui/BorrowerDetail.tsx`, `src/lending/ui/LoanForm.tsx`. Modify `src/app/App.tsx`, `src/app/App.test.tsx`, `src/lending/storage/lendingRepository.ts`, and `src/lending/storage/lendingRepository.test.ts`.
 
 **Interfaces and screen behavior:**
 
@@ -543,6 +548,7 @@ LoanFormProps: { borrowerId: string; onSave(input: LoanDraft): Promise<void> }
 - [ ] Implement hash routing so browser reload and offline navigation work without a server-side router.
 - [ ] Implement borrower list/create/detail flows with the existing UI primitives and Lucide icons. Use archive actions rather than destructive deletion.
 - [ ] Implement loan creation as a draft/preview/confirm flow: normalize percentage input, validate dates and amount, create the first schedule version, generate entries, then save loan/version/entries together through the repository.
+- [ ] Implement `saveLoanBundle` with one IndexedDB read-write transaction and use it after confirmation so a loan cannot be persisted without its initial schedule version and entries.
 - [ ] Add navigation links from borrower detail to its loans and from loan creation back to borrower detail.
 - [ ] Make the dashboard the first usable screen after the base storage smoke UI is replaced.
 - [ ] Run UI tests, full tests, typecheck, and production build.
