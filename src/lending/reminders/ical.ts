@@ -80,6 +80,14 @@ function formatUtcTimestamp(dtstampUtc: string): string {
   return `${String(year).padStart(4, "0")}${String(month).padStart(2, "0")}${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}${String(second).padStart(2, "0")}Z`;
 }
 
+function dtstampFromCreatedAt(createdAt: string): string {
+  if (isDateOnly(createdAt)) {
+    return `${createdAt}T00:00:00.000Z`;
+  }
+  formatUtcTimestamp(createdAt);
+  return createdAt;
+}
+
 function assertValidEvent(event: CalendarEventInput): void {
   if (!Number.isInteger(event.reminderOffsetDays) || event.reminderOffsetDays < 0) {
     throw new Error("reminderOffsetDays must be a non-negative integer");
@@ -170,7 +178,7 @@ export function buildScheduleCalendarEvents(input: {
       summary: `Payment due: ${input.loanLabel}`,
       description: scheduleEntryDescription(entry, input.borrowerName, input.loanLabel),
       reminderOffsetDays: settings.offsetDays,
-      dtstampUtc: entry.createdAt,
+      dtstampUtc: dtstampFromCreatedAt(entry.createdAt),
     });
   }
 
@@ -190,7 +198,7 @@ export function buildScheduleCalendarEvents(input: {
       summary: `Promise to pay: ${input.loanLabel}`,
       description: promiseDescription(promise, entry, input.borrowerName, input.loanLabel),
       reminderOffsetDays: settings.offsetDays,
-      dtstampUtc: promise.createdAt,
+      dtstampUtc: dtstampFromCreatedAt(promise.createdAt),
     });
   }
 

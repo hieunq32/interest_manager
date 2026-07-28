@@ -62,3 +62,8 @@
 ### Commit
 
 - Pending fix commit.
+
+### Follow-up
+
+- Existing generated schedule fixtures may carry date-only createdAt values. Event construction now deterministically normalizes those to midnight UTC before serialization, while complete source timestamps remain strict UTC inputs.
+- Added the regression and reran verification: focused reminder tests passed 17 tests, full tests passed 86 tests, typecheck passed, and git diff --check passed.

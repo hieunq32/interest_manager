@@ -200,4 +200,22 @@ describe("iCalendar serialization", () => {
       },
     ]);
   });
+
+  it("normalizes a date-only source creation value into a deterministic UTC timestamp", () => {
+    const events = buildScheduleCalendarEvents({
+      entries: [entry({ createdAt: "2026-07-01" })],
+      promises: [],
+      borrowerName: "Lan Nguyen",
+      loanLabel: "Home loan",
+      settings: settings(),
+      today: "2026-07-10",
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        dtstampUtc: "2026-07-01T00:00:00.000Z",
+      }),
+    ]);
+    expect(buildIcsCalendar(events)).toContain("DTSTAMP:20260701T000000Z\r\n");
+  });
 });
