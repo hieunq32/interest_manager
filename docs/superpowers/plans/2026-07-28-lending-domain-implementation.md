@@ -484,7 +484,7 @@ buildScheduleCalendarEvents(input: {
 - [ ] Write a failing event-selection test that excludes fully paid schedule entries and closed promises, includes due entries and open promise dates, and marks events with a stable description.
 - [ ] Implement deterministic `.ics` serialization. Use a fixed `PRODID`, CRLF separators, UTC `DTSTART`, and escaped text fields. Vietnam has no DST, so convert configured local time by subtracting seven hours.
 - [ ] Implement download helpers at the UI boundary only. The domain/reminder module returns text and does not access `document`.
-- [ ] Add a stale-calendar state when a schedule revision changes after a prior export; require re-export rather than silently claiming the existing file is current.
+- [ ] Return stable schedule-version/event identity metadata from this domain module. The stale-calendar state and re-export warning are rendered and persisted by the Task 8/9 UI workflow after a schedule revision; do not add browser state here.
 - [ ] Run focused tests, full tests, and typecheck.
 - [ ] Commit as `feat: export lending reminders to Calendar`.
 
