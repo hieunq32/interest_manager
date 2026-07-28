@@ -44,6 +44,22 @@ describe("IndexedDbRecordStore", () => {
     expect(await store.listRecords()).toEqual([secondRecord]);
   });
 
+  it("lists indexed types, writes batches, and deletes individual records", async () => {
+    const store = createStore();
+    const otherTypeRecord: GenericRecord = {
+      ...secondRecord,
+      id: "record-3",
+      type: "system.other",
+    };
+
+    await store.upsertRecords([secondRecord, firstRecord, otherTypeRecord]);
+
+    await expect(store.listRecordsByType("system.smoke")).resolves.toEqual([firstRecord, secondRecord]);
+    await store.deleteRecord(secondRecord.id);
+
+    await expect(store.listRecords()).resolves.toEqual([firstRecord, otherTypeRecord]);
+  });
+
   it("reports storage health with record count", async () => {
     const store = createStore();
     await store.upsertRecord(firstRecord);

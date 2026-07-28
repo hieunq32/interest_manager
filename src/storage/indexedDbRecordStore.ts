@@ -28,9 +28,29 @@ export class IndexedDbRecordStore {
     return records.sort((left, right) => left.id.localeCompare(right.id));
   }
 
+  async listRecordsByType(type: string): Promise<GenericRecord[]> {
+    const db = await this.open();
+    const records = await db.getAllFromIndex(STORE_NAME, "by-type", type);
+    return records.sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   async upsertRecord(record: GenericRecord): Promise<void> {
     const db = await this.open();
     await db.put(STORE_NAME, record);
+  }
+
+  async upsertRecords(records: GenericRecord[]): Promise<void> {
+    const db = await this.open();
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    for (const record of records) {
+      await transaction.store.put(record);
+    }
+    await transaction.done;
+  }
+
+  async deleteRecord(id: string): Promise<void> {
+    const db = await this.open();
+    await db.delete(STORE_NAME, id);
   }
 
   async replaceRecords(records: GenericRecord[]): Promise<void> {
