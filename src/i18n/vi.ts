@@ -53,6 +53,9 @@ export const vi = {
     genericRevisionSave: "Không thể lưu phiên bản lịch", previewFailed: "Không thể xem trước lịch thu",
     requiredDate: "Vui lòng nhập ngày bắt buộc", positiveAmount: "Số tiền phải lớn hơn 0",
     requiredPromiseNote: "Ghi chú hứa trả là bắt buộc", requiredReason: "Vui lòng nhập lý do điều chỉnh",
+    requiredLoanDates: "Vui lòng nhập ngày giải ngân và ngày tất toán", requiredRevisionDates: "Vui lòng nhập ngày áp dụng, ngày giải ngân và ngày tất toán",
+    maturityAfterDisbursement: "Ngày tất toán phải sau ngày giải ngân", effectiveBeforeMaturity: "Ngày áp dụng phải trước ngày tất toán",
+    nonNegativeRate: "Lãi suất phải là số không âm", adjustmentReasonRequired: "Vui lòng nhập lý do điều chỉnh khi thay đổi lãi suất hoặc đơn vị lãi suất",
     invalidReminderOffset: "Số ngày nhắc trước phải là số nguyên không âm", invalidReminderTime: "Giờ nhắc phải có dạng HH:MM",
     backupPassphraseRequired: "Vui lòng nhập mật khẩu sao lưu", restorePassphraseRequired: "Vui lòng nhập mật khẩu khôi phục",
     calendarPreparationFailed: "Không thể chuẩn bị lịch Calendar.", unknown: "Đã xảy ra lỗi. Vui lòng thử lại.",
@@ -79,6 +82,36 @@ const exactErrorTranslations: Record<string, string> = {
   "Could not save loan reminders": vi.errors.genericReminderSave,
   "Could not clear loan reminder override": vi.errors.genericReminderSave,
   "Could not save calendar export": vi.errors.calendarPreparationFailed,
+  "Disbursement and maturity dates are required": vi.errors.requiredLoanDates,
+  "Effective, disbursement, and maturity dates are required": vi.errors.requiredRevisionDates,
+  "Maturity date must be after disbursement date": vi.errors.maturityAfterDisbursement,
+  "maturityDate must be after disbursementDate": vi.errors.maturityAfterDisbursement,
+  "Rate must be a non-negative number": vi.errors.nonNegativeRate,
+  "A non-empty adjustment reason is required when changing the rate or rate unit": vi.errors.adjustmentReasonRequired,
+  "enabled must be a boolean": "Trạng thái bật nhắc hạn phải là giá trị đúng hoặc sai",
+  "offsetDays must be a non-negative integer": "Số ngày nhắc trước phải là số nguyên không âm",
+  "time must use HH:MM in 24-hour time": "Giờ nhắc phải có dạng HH:MM trong hệ 24 giờ",
+  "dtstampUtc must be an ISO UTC timestamp": "Dấu thời gian UTC phải có dạng ISO",
+  "dtstampUtc must be a valid ISO UTC timestamp": "Dấu thời gian UTC phải là thời điểm ISO hợp lệ",
+  "reminderOffsetDays must be a non-negative integer": "Số ngày nhắc trước phải là số nguyên không âm",
+  "month must be between 1 and 12": "Tháng phải từ 1 đến 12",
+  "due day must be between 1 and 31": "Ngày đến hạn phải từ 1 đến 31",
+  "year must be between 0 and 9999": "Năm phải từ 0 đến 9999",
+  "end date cannot be before start date": "Ngày kết thúc không được trước ngày bắt đầu",
+  "rateValue must be a finite number": "Giá trị lãi suất phải là số hữu hạn",
+  "rateValue must be non-negative": vi.errors.nonNegativeRate,
+  "period must span at least one calendar day": "Kỳ tính lãi phải kéo dài ít nhất một ngày dương lịch",
+  "rateUnit must be monthly or daily": "Đơn vị lãi suất phải là theo tháng hoặc theo ngày",
+  "partialPeriodInterestMode is invalid": "Cách tính lãi kỳ không trọn tháng không hợp lệ",
+  "money must be a finite number": "Số tiền phải là số hữu hạn",
+  "money must be non-negative": "Số tiền không được âm",
+  "money must round to a safe integer": "Số tiền phải làm tròn thành số nguyên an toàn",
+  "Invalid backup file": "Tệp sao lưu không hợp lệ",
+  "Unsupported backup version": "Phiên bản sao lưu không được hỗ trợ",
+  "Invalid backup payload": "Nội dung sao lưu không hợp lệ",
+  "Invalid backup records": "Bản ghi sao lưu không hợp lệ",
+  "Unable to decrypt backup payload": "Không thể giải mã nội dung sao lưu",
+  "IndexedDB is unavailable": "Bộ nhớ cục bộ không khả dụng",
 };
 
 function translateDynamicError(message: string): string | undefined {
@@ -89,6 +122,11 @@ function translateDynamicError(message: string): string | undefined {
   if (message.startsWith("Monthly due day")) return "Ngày thu hàng tháng phải từ 1 đến 31";
   if (message.startsWith("effectiveDate must not be before")) return "Ngày áp dụng không được trước ngày giải ngân";
   if (message.startsWith("effectiveDate must not move backwards")) return "Ngày áp dụng không được lùi so với phiên bản trước";
+  if (message === "effectiveDate must be before maturityDate") return vi.errors.effectiveBeforeMaturity;
+  if (message.endsWith(" must be a finite number")) return "Giá trị phải là số hữu hạn";
+  if (message.endsWith(" must be non-negative")) return "Giá trị không được âm";
+  if (message.endsWith(" must be an integer")) return "Giá trị phải là số nguyên";
+  if (message.endsWith(" must be a safe integer")) return "Giá trị phải là số nguyên an toàn";
   return undefined;
 }
 
