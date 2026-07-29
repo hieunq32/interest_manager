@@ -17,6 +17,7 @@ Every task in this plan inherits these decisions from the approved design spec:
 - Reminders use the in-app dashboard and exported `.ics` events for Apple Calendar. No Web Push backend is introduced.
 - The global reminder default is enabled, one day before due, at 08:00. Each loan can override enabled state, offset days, and reminder time.
 - Overdue state is displayed in the app without repeated daily notifications. A promise-to-pay can also be exported as a calendar event.
+- A fully paid schedule entry has no remaining reminder obligation; exclude both its due event and any linked promise event from Calendar export.
 - Each loan selects either interest-only with principal at final settlement or equal principal with flat interest on original principal.
 - The first monthly due date is the configured due day strictly after disbursement. Invalid monthly due days resolve to the last day of that month.
 - A maturity date is explicit and may differ from the monthly due day. It is the final schedule date. For equal-principal loans it replaces the regular due date in its month rather than creating a nearby extra installment.
@@ -489,7 +490,7 @@ buildScheduleCalendarEvents(input: {
 - [ ] Write a failing ICS test proving `VCALENDAR`/`VEVENT` output contains stable UID, local reminder time converted from Asia/Ho_Chi_Minh to UTC, `TRIGGER:-P1D`, and CRLF line endings.
 - [ ] Write a failing escaping test for commas, semicolons, backslashes, and newlines in borrower names, notes, and descriptions.
 - [ ] Write a failing event-selection test that excludes fully paid schedule entries and closed promises, includes due entries and open promise dates, and marks events with a stable description.
-- [ ] Write a failing purity test proving event selection uses the supplied Vietnam `today` date, includes an open future promise even when its linked entry is paid, and serializes a deterministic `DTSTAMP` for every event.
+- [ ] Write a failing purity test proving event selection uses the supplied Vietnam `today` date, excludes an open promise linked to a paid entry, and serializes a deterministic `DTSTAMP` for every event.
 - [ ] Implement deterministic `.ics` serialization. Use a fixed `PRODID`, CRLF separators, UTC `DTSTART`, and escaped text fields. Vietnam has no DST, so convert configured local time by subtracting seven hours.
 - [ ] Implement download helpers at the UI boundary only. The domain/reminder module returns text and does not access `document`.
 - [ ] Return stable schedule-version/event identity metadata from this domain module. The stale-calendar state and re-export warning are rendered and persisted by the Task 8/9 UI workflow after a schedule revision; do not add browser state here.
