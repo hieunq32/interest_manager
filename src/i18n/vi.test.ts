@@ -79,6 +79,10 @@ describe("Vietnamese UI catalog", () => {
 
     expect(translateError(new Error("Unknown error"), "Thông báo dự phòng")).toBe("Thông báo dự phòng");
   });
+
+  it("preserves the supplied fallback for unknown validation-shaped errors", () => {
+    expect(translateError(new Error("Unknown field must be non-negative"), "Caller fallback")).toBe("Caller fallback");
+  });
 });
 
 describe("Vietnamese lending labels", () => {

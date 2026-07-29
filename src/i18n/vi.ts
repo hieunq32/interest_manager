@@ -123,10 +123,11 @@ function translateDynamicError(message: string): string | undefined {
   if (message.startsWith("effectiveDate must not be before")) return "Ngày áp dụng không được trước ngày giải ngân";
   if (message.startsWith("effectiveDate must not move backwards")) return "Ngày áp dụng không được lùi so với phiên bản trước";
   if (message === "effectiveDate must be before maturityDate") return vi.errors.effectiveBeforeMaturity;
-  if (message.endsWith(" must be a finite number")) return "Giá trị phải là số hữu hạn";
-  if (message.endsWith(" must be non-negative")) return "Giá trị không được âm";
-  if (message.endsWith(" must be an integer")) return "Giá trị phải là số nguyên";
-  if (message.endsWith(" must be a safe integer")) return "Giá trị phải là số nguyên an toàn";
+  const moneyError = /^(principalBase|Payment amount|Principal received|Interest received|Promised principal|Promised interest) (must be a finite number|must be non-negative|must be an integer|must be a safe integer)$/.exec(message);
+  if (moneyError?.[2] === "must be a finite number") return "Giá trị phải là số hữu hạn";
+  if (moneyError?.[2] === "must be non-negative") return "Giá trị không được âm";
+  if (moneyError?.[2] === "must be an integer") return "Giá trị phải là số nguyên";
+  if (moneyError?.[2] === "must be a safe integer") return "Giá trị phải là số nguyên an toàn";
   return undefined;
 }
 
