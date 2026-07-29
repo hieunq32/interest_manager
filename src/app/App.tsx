@@ -1,4 +1,4 @@
-import { Archive, FileUp, Plus } from "lucide-react";
+import { Archive, FileUp, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEncryptedBackup, restoreEncryptedBackup } from "../backup/backupService";
 import { calculateEntryStatus, calculateLoanSummary } from "../lending/domain/ledger";
@@ -340,6 +340,17 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setMessage("Backup exported");
   };
 
+  const resetLendingData = async () => {
+    if (!window.confirm("Clear all local lending data?")) {
+      setMessage("Reset cancelled");
+      return;
+    }
+
+    await repository.replaceAllDomainRecords([]);
+    setMessage("Local lending data reset");
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+  };
+
   const restoreBackupFile = async (file: File | undefined) => {
     if (!file) {
       return;
@@ -395,6 +406,10 @@ export function App({ dbName, onCalendarExport }: AppProps) {
             <Field label="Restore passphrase" type="password" value={restorePassphrase} onChange={(event) => setRestorePassphrase(event.target.value)} />
             <input ref={restoreInputRef} aria-label="Backup file" className="file-input" type="file" accept="application/json,.json" onChange={(event) => void restoreBackupFile(event.target.files?.[0])} />
             <Button icon={<FileUp aria-hidden="true" size={18} />} onClick={() => restoreInputRef.current?.click()}>Restore</Button>
+          </div>
+          <div className="operation-panel">
+            <h2>Reset</h2>
+            <Button icon={<Trash2 aria-hidden="true" size={18} />} variant="danger" onClick={resetLendingData}>Reset lending data</Button>
           </div>
         </section>
       );

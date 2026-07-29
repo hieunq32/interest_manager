@@ -51,7 +51,8 @@ export function LoanDetail({
   const [entryForm, setEntryForm] = useState<EntryForm>();
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const activeVersion = versions.find((version) => version.id === loan.defaultScheduleVersionId);
-  const summary = calculateLoanSummary({ loanId: loan.id, entries, payments, promises, today });
+  const activeEntries = entries.filter((entry) => entry.scheduleVersionId === loan.defaultScheduleVersionId);
+  const summary = calculateLoanSummary({ loanId: loan.id, entries: activeEntries, payments, promises, today });
   const calendarState = calendarExportVersionId === loan.defaultScheduleVersionId
     ? "Calendar export matches the active schedule."
     : calendarExportVersionId

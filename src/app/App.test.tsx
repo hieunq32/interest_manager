@@ -116,6 +116,37 @@ describe("App", () => {
     vi.unstubAllGlobals();
   });
 
+  it("resets lending data only after confirmation without clearing unrelated shared records", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const store = new IndexedDbRecordStore(dbName);
+    const repository = new IndexedDbLendingRepository(store);
+    const history = lendingHistory();
+    await saveLendingHistory(repository, history);
+    await store.upsertRecord({
+      id: "system-record",
+      type: "system.smoke",
+      createdAt: history.borrower.createdAt,
+      updatedAt: history.borrower.updatedAt,
+      data: { retained: true },
+    });
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+
+    render(<App dbName={dbName} />);
+
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Reset lending data" }));
+
+    expect(confirm).toHaveBeenCalledWith("Clear all local lending data?");
+    await waitFor(() => expect(screen.getByText("Local lending data reset")).toBeInTheDocument());
+    await expect(repository.listAllDomainRecords()).resolves.toEqual([]);
+    await expect(store.listRecordsByType("system.smoke")).resolves.toEqual([
+      expect.objectContaining({ data: { retained: true } }),
+    ]);
+    vi.unstubAllGlobals();
+  });
+
   it("persists global reminder settings across an App reload", async () => {
     const user = userEvent.setup();
     const dbName = nextDbName();

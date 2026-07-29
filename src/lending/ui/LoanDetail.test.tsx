@@ -35,15 +35,15 @@ const payments: PaymentTransaction[] = [{ id: "payment-1", loanId: loan.id, sche
 const promises: PromiseToPay[] = [{ id: "promise-1", loanId: loan.id, scheduleEntryId: "entry-active", promisedDate: "2026-10-05", note: "Will pay next week", status: "open", createdAt: loan.updatedAt, updatedAt: loan.updatedAt }];
 
 describe("LoanDetail", () => {
-  it("shows derived separate balances and immutable version history while exposing daily entry actions", async () => {
+  it("shows active-version balances and immutable version history while exposing daily entry actions", async () => {
     const user = userEvent.setup();
     const onUpdatePromise = vi.fn().mockResolvedValue(undefined);
     const onExportCalendar = vi.fn();
     render(<LoanDetail loan={loan} borrowerName="Nguyen Van A" versions={versions} entries={entries} payments={payments} promises={promises} today="2026-10-06" calendarExportVersionId="version-1" onBack={vi.fn()} onSavePayment={vi.fn().mockResolvedValue(undefined)} onSavePromise={vi.fn().mockResolvedValue(undefined)} onUpdatePromise={onUpdatePromise} onSaveRevision={vi.fn().mockResolvedValue(undefined)} onExportCalendar={onExportCalendar} />);
 
-    expect(screen.getByText("Outstanding principal: 1,500,000 VND")).toBeInTheDocument();
+    expect(screen.getByText("Outstanding principal: 1,000,000 VND")).toBeInTheDocument();
     expect(screen.getByText("Outstanding interest: 200,000 VND")).toBeInTheDocument();
-    expect(screen.getByText("Overdue: 2")).toBeInTheDocument();
+    expect(screen.getByText("Overdue: 1")).toBeInTheDocument();
     expect(screen.getByText("Calendar export is stale. Re-export the active schedule.")).toBeInTheDocument();
     expect(screen.getByText("Version 1 (read-only)")).toBeInTheDocument();
     expect(screen.getByText("Version 2 (active)")).toBeInTheDocument();
