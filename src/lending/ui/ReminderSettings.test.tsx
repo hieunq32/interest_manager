@@ -47,6 +47,7 @@ describe("ReminderSettings", () => {
     await user.click(screen.getByRole("button", { name: "Save reminder settings" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Reminder offset must be a non-negative whole number");
+    expect(screen.getByLabelText("Reminder offset (days)")).toHaveValue("");
     expect(onSave).not.toHaveBeenCalled();
   });
 });
