@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type {
   Borrower,
   Loan,
+  LoanLifecycleEvent,
+  PaymentAdjustment,
   PaymentTransaction,
   PromiseToPay,
   ReminderSettings,
@@ -77,7 +79,7 @@ describe("backup service", () => {
     await target.replaceAllDomainRecords(restored.records);
 
     await expect(target.listAllDomainRecords()).resolves.toEqual(domainRecords);
-    expect(domainRecords.map((record) => record.type).sort()).toEqual(Object.values(LENDING_RECORD_TYPES).sort());
+    expect(new Set(domainRecords.map((record) => record.type))).toEqual(new Set(Object.values(LENDING_RECORD_TYPES)));
   });
 });
 
@@ -148,6 +150,45 @@ async function saveLendingHistory(repository: IndexedDbLendingRepository): Promi
     principalAmount: 1_000_000,
     interestAmount: 200_000,
     createdAt,
+    status: "adjusted",
+    updatedAt,
+  };
+  const replacementPayment: PaymentTransaction = {
+    ...payment,
+    id: "payment-2",
+    principalAmount: 900_000,
+    status: "active",
+    createdAt: updatedAt,
+    updatedAt,
+  };
+  const paymentAdjustment: PaymentAdjustment = {
+    id: "payment-adjustment-1",
+    loanId: loan.id,
+    paymentId: payment.id,
+    replacementPaymentId: replacementPayment.id,
+    action: "edit",
+    reason: "Correct principal amount",
+    before: {
+      scheduleEntryId: entry.id,
+      receivedAt: payment.receivedAt,
+      principalAmount: 1_000_000,
+      interestAmount: 200_000,
+    },
+    after: {
+      scheduleEntryId: entry.id,
+      receivedAt: replacementPayment.receivedAt,
+      principalAmount: replacementPayment.principalAmount,
+      interestAmount: replacementPayment.interestAmount,
+    },
+    createdAt: updatedAt,
+  };
+  const lifecycleEvent: LoanLifecycleEvent = {
+    id: "loan-lifecycle-event-1",
+    loanId: loan.id,
+    action: "settled",
+    effectiveDate: "2026-07-28",
+    reason: "Balance cleared",
+    createdAt: updatedAt,
   };
   const promise: PromiseToPay = {
     id: "promise-1",
@@ -169,9 +210,24 @@ async function saveLendingHistory(repository: IndexedDbLendingRepository): Promi
   await repository.saveLoan(loan);
   await repository.saveScheduleVersion(version);
   await repository.saveScheduleEntries([entry]);
-  await repository.savePayment(payment);
+  await repository.savePaymentCorrection({
+    original: payment,
+    replacement: replacementPayment,
+    adjustment: paymentAdjustment,
+  });
+  await repository.saveLoanLifecycleMutation({
+    loan: { ...loan, status: "settled", updatedAt },
+    event: lifecycleEvent,
+  });
   await repository.savePromise(promise);
   await repository.saveReminderSettings(settings);
 
-  return repository.listAllDomainRecords();
+  const domainRecords = await repository.listAllDomainRecords();
+  expect(domainRecords).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.payment, data: payment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.payment, data: replacementPayment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.paymentAdjustment, data: paymentAdjustment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.loanLifecycleEvent, data: lifecycleEvent }),
+  ]));
+  return domainRecords;
 }

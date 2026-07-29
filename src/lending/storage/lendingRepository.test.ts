@@ -3,6 +3,10 @@ import type { GenericRecord } from "../../backup/types";
 import type {
   Borrower,
   Loan,
+  LoanLifecycleEvent,
+  PaymentAdjustment,
+  PaymentCancellationMutation,
+  PaymentCorrectionMutation,
   PaymentTransaction,
   PromiseToPay,
   ReminderSettings,
@@ -11,6 +15,7 @@ import type {
 } from "../domain/types";
 import { IndexedDbRecordStore } from "../../storage/indexedDbRecordStore";
 import { IndexedDbLendingRepository } from "./lendingRepository";
+import { isLendingRecordType } from "./recordTypes";
 
 let dbCounter = 0;
 
@@ -170,7 +175,9 @@ describe("IndexedDbLendingRepository", () => {
     await expect(repository.listLoans()).resolves.toEqual([loan, secondLoan]);
     await expect(repository.listScheduleVersions(loan.id)).resolves.toEqual([version]);
     await expect(repository.listScheduleEntries(version.id)).resolves.toEqual([entry, secondEntry]);
-    await expect(repository.listPayments(loan.id)).resolves.toEqual([payment]);
+    await expect(repository.listPayments(loan.id)).resolves.toEqual([
+      { ...payment, status: "active", updatedAt: payment.createdAt },
+    ]);
     await expect(repository.listPromises(loan.id)).resolves.toEqual([promise]);
     await expect(repository.getReminderSettings()).resolves.toEqual(reminderSettings);
   });
@@ -190,6 +197,163 @@ describe("IndexedDbLendingRepository", () => {
     await repository.saveScheduleEntries([replacementEntry]);
 
     await expect(repository.listScheduleEntries(version.id)).resolves.toEqual([replacementEntry, secondEntry]);
+  });
+
+  it("recognizes payment audit record types and normalizes legacy active payments", async () => {
+    const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
+    const repository = new IndexedDbLendingRepository(store);
+
+    await store.upsertRecord({
+      id: payment.id,
+      type: "lending.payment",
+      createdAt,
+      updatedAt: createdAt,
+      data: payment as unknown as GenericRecord["data"],
+    });
+
+    expect(isLendingRecordType("lending.payment-adjustment")).toBe(true);
+    expect(isLendingRecordType("lending.loan-lifecycle-event")).toBe(true);
+    await expect(repository.listPayments(loan.id)).resolves.toEqual([
+      { ...payment, status: "active", updatedAt: createdAt },
+    ]);
+    await expect(repository.listPaymentHistory(loan.id)).resolves.toEqual([
+      { ...payment, status: "active", updatedAt: createdAt },
+    ]);
+  });
+
+  it("atomically persists a payment correction and invalidates its calendar export", async () => {
+    const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
+    const repository = new IndexedDbLendingRepository(store);
+    const mutation: PaymentCorrectionMutation = {
+      original: { ...payment, status: "adjusted", updatedAt: "2026-07-28T02:00:00.000Z" },
+      replacement: {
+        ...payment,
+        id: "payment-1-replacement",
+        principalAmount: 900_000,
+        status: "active",
+        createdAt: "2026-07-28T02:00:00.000Z",
+        updatedAt: "2026-07-28T02:00:00.000Z",
+      },
+      adjustment: {
+        id: "payment-adjustment-1",
+        loanId: loan.id,
+        paymentId: payment.id,
+        replacementPaymentId: "payment-1-replacement",
+        action: "edit",
+        reason: "Correct principal amount",
+        before: {
+          scheduleEntryId: entry.id,
+          receivedAt: payment.receivedAt,
+          principalAmount: payment.principalAmount,
+          interestAmount: payment.interestAmount,
+        },
+        after: {
+          scheduleEntryId: entry.id,
+          receivedAt: payment.receivedAt,
+          principalAmount: 900_000,
+          interestAmount: payment.interestAmount,
+        },
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    };
+
+    await repository.savePayment(payment);
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+    const upsertRecords = vi.spyOn(store, "upsertRecords");
+
+    await repository.savePaymentCorrection(mutation);
+
+    expect(upsertRecords).toHaveBeenCalledTimes(1);
+    expect(upsertRecords).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ type: "lending.payment", data: mutation.original }),
+      expect.objectContaining({ type: "lending.payment", data: mutation.replacement }),
+      expect.objectContaining({ type: "lending.payment-adjustment", data: mutation.adjustment }),
+      expect.objectContaining({ type: "lending.loan" }),
+    ]));
+    await expect(repository.listPayments(loan.id)).resolves.toEqual([mutation.replacement]);
+    await expect(repository.listPaymentHistory(loan.id)).resolves.toEqual([
+      mutation.original,
+      mutation.replacement,
+    ]);
+    await expect(repository.listPaymentAdjustments(loan.id)).resolves.toEqual([mutation.adjustment]);
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+  });
+
+  it("atomically voids a payment while retaining it in payment history", async () => {
+    const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
+    const repository = new IndexedDbLendingRepository(store);
+    const otherPayment: PaymentTransaction = {
+      ...payment,
+      id: "payment-2",
+      status: "active",
+      updatedAt: "2026-07-28T01:30:00.000Z",
+    };
+    const mutation: PaymentCancellationMutation = {
+      original: { ...payment, status: "voided", updatedAt: "2026-07-28T02:00:00.000Z" },
+      adjustment: {
+        id: "payment-adjustment-2",
+        loanId: loan.id,
+        paymentId: payment.id,
+        action: "void",
+        reason: "Duplicate receipt",
+        before: {
+          scheduleEntryId: entry.id,
+          receivedAt: payment.receivedAt,
+          principalAmount: payment.principalAmount,
+          interestAmount: payment.interestAmount,
+        },
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    };
+
+    await repository.savePayment(payment);
+    await repository.savePayment(otherPayment);
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+    const upsertRecords = vi.spyOn(store, "upsertRecords");
+
+    await repository.savePaymentCancellation(mutation);
+
+    expect(upsertRecords).toHaveBeenCalledTimes(1);
+    expect(upsertRecords).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ type: "lending.payment", data: mutation.original }),
+      expect.objectContaining({ type: "lending.payment-adjustment", data: mutation.adjustment }),
+      expect.objectContaining({ type: "lending.loan" }),
+    ]));
+    await expect(repository.listPayments(loan.id)).resolves.toEqual([otherPayment]);
+    await expect(repository.listPaymentHistory(loan.id)).resolves.toEqual([
+      mutation.original,
+      otherPayment,
+    ]);
+    await expect(repository.listPaymentAdjustments(loan.id)).resolves.toEqual([mutation.adjustment]);
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+  });
+
+  it("persists loan lifecycle mutations as one batch", async () => {
+    const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
+    const repository = new IndexedDbLendingRepository(store);
+    const settledLoan: Loan = { ...loan, status: "settled", updatedAt: "2026-07-28T02:00:00.000Z" };
+    const event: LoanLifecycleEvent = {
+      id: "loan-lifecycle-event-1",
+      loanId: loan.id,
+      action: "settled",
+      effectiveDate: "2026-07-28",
+      reason: "Balance cleared",
+      createdAt: "2026-07-28T02:00:00.000Z",
+    };
+    const upsertRecords = vi.spyOn(store, "upsertRecords");
+
+    await repository.saveLoanLifecycleMutation({ loan: settledLoan, event });
+
+    expect(upsertRecords).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ type: "lending.loan", data: settledLoan }),
+      expect.objectContaining({ type: "lending.loan-lifecycle-event", data: event }),
+    ]));
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([settledLoan]);
+    await expect(repository.listLoanLifecycleEvents(loan.id)).resolves.toEqual([event]);
   });
 
   it("saves and replaces a complete loan bundle with one record-store batch", async () => {
