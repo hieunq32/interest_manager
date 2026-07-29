@@ -7,10 +7,10 @@ import {
   selectCurrentLoanEntries,
 } from "../lending/domain/ledger";
 import { filterLoans, getLoanCollectionStatus, type LoanCollectionContext } from "../lending/domain/loanSelectors";
-import { normalizePayment } from "../lending/domain/paymentCorrections";
+import { buildPaymentCancellation, buildPaymentCorrection, normalizePayment } from "../lending/domain/paymentCorrections";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
-import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
+import type { Borrower, Loan, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import { buildIcsCalendar, buildScheduleCalendarEvents } from "../lending/reminders/ical";
 import { DEFAULT_REMINDER_SETTINGS, resolveReminderSettings } from "../lending/reminders/reminderSettings";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
@@ -129,6 +129,8 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   const [scheduleVersions, setScheduleVersions] = useState<ScheduleVersion[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentTransaction[]>([]);
+  const [paymentAdjustments, setPaymentAdjustments] = useState<PaymentAdjustment[]>([]);
   const [promises, setPromises] = useState<PromiseToPay[]>([]);
   const [reminderSettings, setReminderSettings] = useState(DEFAULT_REMINDER_SETTINGS);
   const [mode, setMode] = useState<"none" | "create-borrower" | "edit-borrower" | "create-loan">("none");
@@ -141,12 +143,14 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   }, [store]);
 
   const refreshLendingData = useCallback(async () => {
-    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPromises, nextReminderSettings] = await Promise.all([
+    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPaymentHistory, nextPaymentAdjustments, nextPromises, nextReminderSettings] = await Promise.all([
       repository.listBorrowers(),
       repository.listLoans(),
       repository.listScheduleVersions(),
       repository.listScheduleEntries(),
       repository.listPayments(),
+      repository.listPaymentHistory(),
+      repository.listPaymentAdjustments(),
       repository.listPromises(),
       repository.getReminderSettings(),
     ]);
@@ -155,6 +159,8 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setScheduleVersions(nextVersions);
     setScheduleEntries(nextEntries);
     setPayments(nextPayments);
+    setPaymentHistory(nextPaymentHistory);
+    setPaymentAdjustments(nextPaymentAdjustments);
     setPromises(nextPromises);
     setReminderSettings(nextReminderSettings ?? DEFAULT_REMINDER_SETTINGS);
   }, [repository]);
@@ -259,6 +265,32 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     await repository.savePayment(value);
     await Promise.all([refreshHealth(), refreshLendingData()]);
     setMessage("Payment recorded");
+  };
+
+  const editPayment = async (payment: PaymentTransaction, next: PaymentSnapshot, reason: string) => {
+    const now = new Date().toISOString();
+    await repository.savePaymentCorrection(buildPaymentCorrection({
+      payment,
+      next,
+      reason,
+      adjustmentId: crypto.randomUUID(),
+      replacementId: crypto.randomUUID(),
+      now,
+    }));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Payment corrected");
+  };
+
+  const cancelPayment = async (payment: PaymentTransaction, reason: string) => {
+    const now = new Date().toISOString();
+    await repository.savePaymentCancellation(buildPaymentCancellation({
+      payment,
+      reason,
+      adjustmentId: crypto.randomUUID(),
+      now,
+    }));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Payment cancelled");
   };
 
   const savePromise = async (value: PromiseToPay) => {
@@ -494,11 +526,15 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         versions={loanVersions}
         entries={scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId))}
         payments={payments.filter((payment) => payment.loanId === loan.id)}
+        paymentHistory={paymentHistory.filter((payment) => payment.loanId === loan.id)}
+        paymentAdjustments={paymentAdjustments.filter((adjustment) => adjustment.loanId === loan.id)}
         promises={promises.filter((promise) => promise.loanId === loan.id)}
         today={todayInVietnam()}
         calendarExportVersionId={loan.calendarExportVersionId}
         onBack={() => navigate({ name: "borrower", borrowerId: loan.borrowerId })}
         onSavePayment={savePayment}
+        onEditPayment={editPayment}
+        onCancelPayment={cancelPayment}
         onSavePromise={savePromise}
         onUpdatePromise={updatePromise}
         onSaveRevision={(input) => saveRevision(loan, input)}

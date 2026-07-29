@@ -686,6 +686,46 @@ describe("App", () => {
     await waitFor(async () => expect((await repository.listLoans())[0]).not.toHaveProperty("reminderOverride"));
   });
 
+  it("persists payment corrections and cancellations with their audit records", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    await saveLendingHistory(repository, history);
+    window.location.hash = `#/loans/${history.loan.id}`;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Chi tiết khoản vay" });
+    await user.click(screen.getByRole("button", { name: "Sửa giao dịch" }));
+    await user.clear(screen.getByLabelText("Gốc đã thu (đ)"));
+    await user.type(screen.getByLabelText("Gốc đã thu (đ)"), "120000");
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Corrected receipt");
+    await user.click(screen.getByRole("button", { name: "Lưu điều chỉnh" }));
+
+    await waitFor(async () => expect(await repository.listPaymentAdjustments(history.loan.id)).toEqual([
+      expect.objectContaining({ action: "edit", reason: "Corrected receipt", paymentId: history.payment.id }),
+    ]));
+    const replacement = (await repository.listPayments(history.loan.id))[0];
+    expect(replacement).toMatchObject({ principalAmount: 120_000, status: "active" });
+    expect(await repository.listPaymentHistory(history.loan.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: history.payment.id, status: "adjusted" }),
+      expect.objectContaining({ id: replacement.id, status: "active" }),
+    ]));
+
+    await user.click(screen.getByRole("button", { name: "Hủy giao dịch" }));
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Duplicate receipt");
+    await user.click(screen.getByRole("button", { name: "Xác nhận hủy giao dịch" }));
+
+    await waitFor(async () => expect(await repository.listPaymentAdjustments(history.loan.id)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "void", reason: "Duplicate receipt", paymentId: replacement.id }),
+    ])));
+    await expect(repository.listPayments(history.loan.id)).resolves.toEqual([]);
+    expect(confirm).toHaveBeenCalledWith("Xác nhận hủy giao dịch");
+    confirm.mockRestore();
+  });
+
   it("filters borrower loans from current collection data without changing IndexedDB", async () => {
     const user = userEvent.setup();
     const dbName = nextDbName();

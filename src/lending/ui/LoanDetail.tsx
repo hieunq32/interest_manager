@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import {
   calculateEntryStatus,
@@ -7,9 +7,10 @@ import {
   selectCurrentLoanEntries,
 } from "../domain/ledger";
 import type { RevisionInput } from "../domain/revisions";
-import type { Loan, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../domain/types";
+import type { Loan, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { PaymentForm } from "./PaymentForm";
+import { PaymentCorrectionForm } from "./PaymentCorrectionForm";
 import { PromiseForm } from "./PromiseForm";
 import { ScheduleRevisionForm } from "./ScheduleRevisionForm";
 import { LoanReminderOverrideForm } from "./LoanReminderOverrideForm";
@@ -22,11 +23,15 @@ export interface LoanDetailProps {
   versions: ScheduleVersion[];
   entries: ScheduleEntry[];
   payments: PaymentTransaction[];
+  paymentHistory: PaymentTransaction[];
+  paymentAdjustments: PaymentAdjustment[];
   promises: PromiseToPay[];
   today: string;
   calendarExportVersionId?: string;
   onBack(): void;
   onSavePayment(value: PaymentTransaction): Promise<void>;
+  onEditPayment(payment: PaymentTransaction, next: PaymentSnapshot, reason: string): Promise<void>;
+  onCancelPayment(payment: PaymentTransaction, reason: string): Promise<void>;
   onSavePromise(value: PromiseToPay): Promise<void>;
   onUpdatePromise(value: PromiseToPay): Promise<void>;
   onSaveRevision(input: RevisionInput): Promise<void>;
@@ -34,7 +39,13 @@ export interface LoanDetailProps {
   onExportCalendar(versionId: string): void;
 }
 
+export interface PaymentHistoryView {
+  payment: PaymentTransaction;
+  adjustments: PaymentAdjustment[];
+}
+
 type EntryForm = { kind: "payment" | "promise"; entryId: string } | undefined;
+type PaymentCorrection = { payment: PaymentTransaction; mode: "edit" | "void" } | undefined;
 
 function entryStatusLabel(value: string): string {
   const labels: Record<string, string> = {
@@ -58,11 +69,15 @@ export function LoanDetail({
   versions,
   entries,
   payments,
+  paymentHistory,
+  paymentAdjustments,
   promises,
   today,
   calendarExportVersionId,
   onBack,
   onSavePayment,
+  onEditPayment,
+  onCancelPayment,
   onSavePromise,
   onUpdatePromise,
   onSaveRevision,
@@ -70,6 +85,7 @@ export function LoanDetail({
   onExportCalendar,
 }: LoanDetailProps) {
   const [entryForm, setEntryForm] = useState<EntryForm>();
+  const [paymentCorrection, setPaymentCorrection] = useState<PaymentCorrection>();
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const activeVersion = versions.find((version) => version.id === loan.defaultScheduleVersionId);
   const currentEntries = selectCurrentLoanEntries({
@@ -88,6 +104,12 @@ export function LoanDetail({
     : calendarExportVersionId
       ? vi.calendar.stale
       : vi.calendar.notExported;
+  const paymentHistoryViews: PaymentHistoryView[] = paymentHistory
+    .filter((payment) => payment.status === "adjusted" || payment.status === "voided")
+    .map((payment) => ({
+      payment,
+      adjustments: paymentAdjustments.filter((adjustment) => adjustment.paymentId === payment.id),
+    }));
 
   const changePromiseStatus = async (promise: PromiseToPay, status: "fulfilled" | "cancelled") => {
     await onUpdatePromise({ ...promise, status, updatedAt: new Date().toISOString() });
@@ -106,6 +128,17 @@ export function LoanDetail({
   const saveRevision = async (input: RevisionInput) => {
     await onSaveRevision(input);
     setShowRevisionForm(false);
+  };
+
+  const savePaymentCorrection = async (next: PaymentSnapshot | undefined, reason: string) => {
+    if (!paymentCorrection) return;
+    if (paymentCorrection.mode === "void") {
+      if (!window.confirm(vi.payment.confirmVoid)) return;
+      await onCancelPayment(paymentCorrection.payment, reason);
+    } else if (next) {
+      await onEditPayment(paymentCorrection.payment, next, reason);
+    }
+    setPaymentCorrection(undefined);
   };
 
   return (
@@ -166,7 +199,7 @@ export function LoanDetail({
                     <td>{formatMoneyVnd(entry.expectedPrincipal)} / {formatMoneyVnd(totals.receivedPrincipal)} / {formatMoneyVnd(totals.outstandingPrincipal)}</td>
                     <td>{formatMoneyVnd(entry.expectedInterest)} / {formatMoneyVnd(totals.receivedInterest)} / {formatMoneyVnd(totals.outstandingInterest)}</td>
                     <td>{isCurrent ? <div className="button-row">
-                      <Button icon={<CircleDollarSign aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "payment", entryId: entry.id })}>{vi.payment.record}</Button>
+                      {loan.status !== "settled" ? <Button icon={<CircleDollarSign aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "payment", entryId: entry.id })}>{vi.payment.record}</Button> : null}
                       <Button icon={<CalendarDays aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "promise", entryId: entry.id })}>{vi.promise.record}</Button>
                     </div> : vi.loan.readOnly}</td>
                   </tr>;
@@ -184,13 +217,33 @@ export function LoanDetail({
           : <PromiseForm loanId={loan.id} scheduleEntryId={entryForm.entryId} onSave={savePromise} />}
       </section> : null}
 
+      {paymentCorrection ? <section className="schedule-preview" aria-labelledby="payment-correction-heading">
+        <h3 id="payment-correction-heading">{paymentCorrection.mode === "edit" ? vi.payment.edit : vi.payment.void}</h3>
+        <PaymentCorrectionForm payment={paymentCorrection.payment} mode={paymentCorrection.mode} onSave={savePaymentCorrection} onCancel={() => setPaymentCorrection(undefined)} />
+      </section> : null}
+
       <section className="schedule-preview" aria-labelledby="payments-heading">
         <h3 id="payments-heading">{vi.payment.history}</h3>
         {payments.length === 0 ? <p className="empty-state">{vi.payment.noPayments}</p> : <table>
-          <thead><tr><th>{vi.payment.receivedDate}</th><th>{vi.payment.scheduleEntry}</th><th>{vi.loan.principal}</th><th>{vi.loan.interest}</th><th>{vi.common.note}</th></tr></thead>
-          <tbody>{payments.map((payment) => <tr key={payment.id}><td>{payment.receivedAt}</td><td>{payment.scheduleEntryId ?? vi.common.unassigned}</td><td>{formatMoneyVnd(payment.principalAmount)}</td><td>{formatMoneyVnd(payment.interestAmount)}</td><td>{payment.note ?? ""}</td></tr>)}</tbody>
+          <thead><tr><th>{vi.payment.receivedDate}</th><th>{vi.payment.scheduleEntry}</th><th>{vi.loan.principal}</th><th>{vi.loan.interest}</th><th>{vi.common.note}</th><th>{vi.common.actions}</th></tr></thead>
+          <tbody>{payments.map((payment) => <tr key={payment.id}><td>{payment.receivedAt}</td><td>{payment.scheduleEntryId ?? vi.common.unassigned}</td><td>{formatMoneyVnd(payment.principalAmount)}</td><td>{formatMoneyVnd(payment.interestAmount)}</td><td>{payment.note ?? ""}</td><td>{loan.status !== "settled" && (payment.status === undefined || payment.status === "active") ? <div className="button-row">
+            <Button icon={<Pencil aria-hidden="true" size={16} />} title={vi.payment.edit} onClick={() => setPaymentCorrection({ payment, mode: "edit" })}>{vi.payment.edit}</Button>
+            <Button icon={<Trash2 aria-hidden="true" size={16} />} title={vi.payment.void} variant="danger" onClick={() => setPaymentCorrection({ payment, mode: "void" })}>{vi.payment.void}</Button>
+          </div> : null}</td></tr>)}</tbody>
         </table>}
       </section>
+
+      {paymentHistoryViews.length > 0 ? <section className="schedule-preview" aria-label={vi.payment.adjustmentHistory}>
+        {paymentHistoryViews.map(({ payment, adjustments }) => <details key={payment.id}>
+          <summary>{vi.payment.adjustmentHistory}</summary>
+          {adjustments.map((adjustment) => <section key={adjustment.id}>
+            <p>{vi.payment.before}: {adjustment.before.receivedAt} / {formatMoneyVnd(adjustment.before.principalAmount)} / {formatMoneyVnd(adjustment.before.interestAmount)} / <span>{adjustment.before.note ?? ""}</span></p>
+            {adjustment.after ? <p>{vi.payment.after}: {adjustment.after.receivedAt} / {formatMoneyVnd(adjustment.after.principalAmount)} / {formatMoneyVnd(adjustment.after.interestAmount)} / <span>{adjustment.after.note ?? ""}</span></p> : null}
+            <p>{vi.payment.correctionReason}: <span>{adjustment.reason}</span></p>
+            <p>{vi.payment.adjustmentTime}: <span>{adjustment.createdAt}</span></p>
+          </section>)}
+        </details>)}
+      </section> : null}
 
       <section className="schedule-preview" aria-labelledby="promises-heading">
         <h3 id="promises-heading">{vi.promise.history}</h3>

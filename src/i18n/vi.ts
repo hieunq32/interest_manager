@@ -21,6 +21,8 @@ export const vi = {
       "Borrower archived": "Đã lưu trữ người vay",
       "Loan saved": "Đã lưu khoản vay",
       "Payment recorded": "Đã ghi nhận khoản thu",
+      "Payment corrected": "Đã điều chỉnh giao dịch",
+      "Payment cancelled": "Đã hủy giao dịch",
       "Promise recorded": "Đã ghi nhận lời hứa trả",
       "Promise fulfilled": "Đã đánh dấu lời hứa đã thực hiện",
       "Promise cancelled": "Đã hủy lời hứa trả",
@@ -70,6 +72,8 @@ export const vi = {
     record: "Ghi nhận khoản thu", history: "Lịch sử thu tiền", receivedDate: "Ngày thu",
     principalReceived: "Gốc đã thu (đ)", interestReceived: "Lãi đã thu (đ)", scheduleEntry: "Kỳ thu",
     save: "Lưu khoản thu", noPayments: "Chưa có khoản thu nào.", received: "Đã thu", expected: "Dự kiến", outstanding: "Còn phải thu",
+    edit: "Sửa giao dịch", void: "Hủy giao dịch", correctionReason: "Lý do điều chỉnh", saveCorrection: "Lưu điều chỉnh", confirmVoid: "Xác nhận hủy giao dịch",
+    adjustmentHistory: "Lịch sử điều chỉnh", before: "Trước điều chỉnh", after: "Sau điều chỉnh", adjustmentTime: "Thời gian điều chỉnh",
   },
   promise: {
     record: "Ghi nhận lời hứa trả", history: "Lịch sử hứa trả", promisedDate: "Ngày hứa trả",
