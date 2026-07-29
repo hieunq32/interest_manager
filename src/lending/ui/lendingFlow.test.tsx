@@ -19,13 +19,13 @@ describe("BorrowerForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { rerender } = render(<BorrowerForm onSave={onSave} />);
 
-    await user.click(screen.getByRole("button", { name: "Save borrower" }));
-    expect(screen.getByText("Display name is required")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Lưu người vay" }));
+    expect(screen.getByText("Tên hiển thị là bắt buộc")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Display name"), " Tran Thi B ");
-    await user.type(screen.getByLabelText("Phone"), "0909000000");
-    await user.type(screen.getByLabelText("Note"), "Prefers afternoon calls");
-    await user.click(screen.getByRole("button", { name: "Save borrower" }));
+    await user.type(screen.getByLabelText("Tên hiển thị"), " Tran Thi B ");
+    await user.type(screen.getByLabelText("Số điện thoại"), "0909000000");
+    await user.type(screen.getByLabelText("Ghi chú"), "Prefers afternoon calls");
+    await user.click(screen.getByRole("button", { name: "Lưu người vay" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({
@@ -36,7 +36,7 @@ describe("BorrowerForm", () => {
     });
 
     rerender(<BorrowerForm value={borrower} onSave={onSave} />);
-    await user.click(screen.getByRole("button", { name: "Archive borrower" }));
+    await user.click(screen.getByRole("button", { name: "Lưu trữ người vay" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
     expect(onSave.mock.calls[1][0]).toMatchObject({
@@ -53,12 +53,12 @@ describe("LoanForm", () => {
     const user = userEvent.setup();
     render(<LoanForm borrowerId="borrower-1" onSave={vi.fn().mockResolvedValue(undefined)} />);
 
-    await user.type(screen.getByLabelText("Principal (VND)"), "10000000");
-    await user.type(screen.getByLabelText("Disbursement date"), "2026-06-20");
-    await user.type(screen.getByLabelText("Maturity date"), "2026-12-15");
-    await user.click(screen.getByRole("button", { name: "Preview schedule" }));
+    await user.type(screen.getByLabelText("Tiền gốc (đ)"), "10000000");
+    await user.type(screen.getByLabelText("Ngày giải ngân"), "2026-06-20");
+    await user.type(screen.getByLabelText("Ngày tất toán"), "2026-12-15");
+    await user.click(screen.getByRole("button", { name: "Xem trước lịch thu" }));
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Rate must be a non-negative number");
+    expect(screen.getByRole("alert")).toHaveTextContent("Lãi suất phải là số không âm");
   });
 
   it("previews six entries before confirming a normalized loan draft", async () => {
@@ -66,31 +66,31 @@ describe("LoanForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<LoanForm borrowerId="borrower-1" onSave={onSave} />);
 
-    await user.clear(screen.getByLabelText("Principal (VND)"));
-    await user.type(screen.getByLabelText("Principal (VND)"), "10000000");
-    await user.type(screen.getByLabelText("Disbursement date"), "2026-06-20");
-    await user.selectOptions(screen.getByLabelText("Calculation model"), "equal-principal-flat-interest");
-    await user.clear(screen.getByLabelText("Monthly due day"));
-    await user.type(screen.getByLabelText("Monthly due day"), "5");
-    await user.type(screen.getByLabelText("Maturity date"), "2026-12-15");
-    await user.clear(screen.getByLabelText("Rate (%)"));
-    await user.type(screen.getByLabelText("Rate (%)"), "2");
-    await user.selectOptions(screen.getByLabelText("Rate unit"), "monthly");
-    await user.selectOptions(screen.getByLabelText("Partial-period interest"), "calendar-day-prorated");
-    await user.click(screen.getByLabelText("Use reminder override"));
-    await user.clear(screen.getByLabelText("Reminder offset (days)"));
-    await user.type(screen.getByLabelText("Reminder offset (days)"), "2");
-    await user.clear(screen.getByLabelText("Reminder time"));
-    await user.type(screen.getByLabelText("Reminder time"), "09:30");
-    await user.type(screen.getByLabelText("Note"), "Six-month term");
+    await user.clear(screen.getByLabelText("Tiền gốc (đ)"));
+    await user.type(screen.getByLabelText("Tiền gốc (đ)"), "10000000");
+    await user.type(screen.getByLabelText("Ngày giải ngân"), "2026-06-20");
+    await user.selectOptions(screen.getByLabelText("Mô hình tính"), "equal-principal-flat-interest");
+    await user.clear(screen.getByLabelText("Ngày thu hàng tháng"));
+    await user.type(screen.getByLabelText("Ngày thu hàng tháng"), "5");
+    await user.type(screen.getByLabelText("Ngày tất toán"), "2026-12-15");
+    await user.clear(screen.getByLabelText("Lãi suất (%)"));
+    await user.type(screen.getByLabelText("Lãi suất (%)"), "2");
+    await user.selectOptions(screen.getByLabelText("Đơn vị lãi suất"), "monthly");
+    await user.selectOptions(screen.getByLabelText("Cách tính lãi kỳ không trọn tháng"), "calendar-day-prorated");
+    await user.click(screen.getByLabelText("Dùng cấu hình nhắc riêng"));
+    await user.clear(screen.getByLabelText("Nhắc trước (ngày)"));
+    await user.type(screen.getByLabelText("Nhắc trước (ngày)"), "2");
+    await user.clear(screen.getByLabelText("Giờ nhắc"));
+    await user.type(screen.getByLabelText("Giờ nhắc"), "09:30");
+    await user.type(screen.getByLabelText("Ghi chú"), "Six-month term");
 
-    await user.click(screen.getByRole("button", { name: "Preview schedule" }));
+    await user.click(screen.getByRole("button", { name: "Xem trước lịch thu" }));
 
-    expect(await screen.findByRole("heading", { name: "Schedule preview" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Xem trước lịch thu" })).toBeInTheDocument();
     expect(screen.getAllByRole("row")).toHaveLength(7);
     expect(onSave).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Confirm and save loan" }));
+    await user.click(screen.getByRole("button", { name: "Xác nhận và lưu khoản vay" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({
       borrowerId: "borrower-1",
@@ -111,15 +111,15 @@ describe("LoanForm", () => {
     const user = userEvent.setup();
     render(<LoanForm borrowerId="borrower-1" onSave={vi.fn().mockResolvedValue(undefined)} />);
 
-    await user.type(screen.getByLabelText("Principal (VND)"), "10000000");
-    await user.type(screen.getByLabelText("Disbursement date"), "2026-06-20");
-    await user.type(screen.getByLabelText("Maturity date"), "2026-12-15");
-    await user.type(screen.getByLabelText("Rate (%)"), "2");
-    await user.click(screen.getByLabelText("Use reminder override"));
-    await user.clear(screen.getByLabelText("Reminder offset (days)"));
-    await user.click(screen.getByRole("button", { name: "Preview schedule" }));
+    await user.type(screen.getByLabelText("Tiền gốc (đ)"), "10000000");
+    await user.type(screen.getByLabelText("Ngày giải ngân"), "2026-06-20");
+    await user.type(screen.getByLabelText("Ngày tất toán"), "2026-12-15");
+    await user.type(screen.getByLabelText("Lãi suất (%)"), "2");
+    await user.click(screen.getByLabelText("Dùng cấu hình nhắc riêng"));
+    await user.clear(screen.getByLabelText("Nhắc trước (ngày)"));
+    await user.click(screen.getByRole("button", { name: "Xem trước lịch thu" }));
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Reminder offset must be a non-negative whole number");
-    expect(screen.queryByRole("heading", { name: "Schedule preview" })).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Số ngày nhắc trước phải là số nguyên không âm");
+    expect(screen.queryByRole("heading", { name: "Xem trước lịch thu" })).not.toBeInTheDocument();
   });
 });

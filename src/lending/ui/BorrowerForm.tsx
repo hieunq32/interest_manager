@@ -1,5 +1,6 @@
 import { Archive, Save } from "lucide-react";
 import { useEffect, useState } from "react";
+import { translateError, vi } from "../../i18n/vi";
 import type { Borrower } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
@@ -38,7 +39,7 @@ export function BorrowerForm({ value, onSave, onCancel }: BorrowerFormWithCancel
   const save = async (status = value?.status ?? "active") => {
     const displayName = form.displayName.trim();
     if (!displayName) {
-      setError("Display name is required");
+      setError(vi.errors.displayNameRequired);
       return;
     }
 
@@ -55,8 +56,8 @@ export function BorrowerForm({ value, onSave, onCancel }: BorrowerFormWithCancel
         createdAt: value?.createdAt ?? now,
         updatedAt: now,
       });
-    } catch {
-      setError("Could not save borrower");
+    } catch (error) {
+      setError(translateError(error, vi.errors.genericBorrowerSave));
     } finally {
       setIsSaving(false);
     }
@@ -64,23 +65,23 @@ export function BorrowerForm({ value, onSave, onCancel }: BorrowerFormWithCancel
 
   return (
     <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <Field label="Display name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
-      <Field label="Phone" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+      <Field label={vi.borrower.displayName} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
+      <Field label={vi.borrower.phone} type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
       <label className="field" htmlFor="borrower-note">
-        <span>Note</span>
+        <span>{vi.borrower.note}</span>
         <textarea id="borrower-note" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} />
       </label>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <div className="button-row">
         <Button icon={<Save aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} type="submit">
-          Save borrower
+          {vi.borrower.save}
         </Button>
         {value?.status === "active" ? (
           <Button icon={<Archive aria-hidden="true" size={18} />} disabled={isSaving} onClick={() => void save("archived")}>
-            Archive borrower
+            {vi.borrower.archive}
           </Button>
         ) : null}
-        {onCancel ? <Button onClick={onCancel}>Cancel</Button> : null}
+        {onCancel ? <Button onClick={onCancel}>{vi.common.cancel}</Button> : null}
       </div>
     </form>
   );

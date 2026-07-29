@@ -9,13 +9,13 @@ describe("PaymentForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<PaymentForm loanId="loan-1" scheduleEntryId="entry-1" onSave={onSave} />);
 
-    await user.type(screen.getByLabelText("Received date"), "2026-08-05");
-    await user.click(screen.getByRole("button", { name: "Save payment" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("At least one received amount must be positive");
+    await user.type(screen.getByLabelText("Ngày thu"), "2026-08-05");
+    await user.click(screen.getByRole("button", { name: "Lưu khoản thu" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Số tiền phải lớn hơn 0");
 
-    await user.type(screen.getByLabelText("Principal received (VND)"), "1.5");
-    await user.click(screen.getByRole("button", { name: "Save payment" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Principal received must be an integer");
+    await user.type(screen.getByLabelText("Gốc đã thu (đ)"), "1.5");
+    await user.click(screen.getByRole("button", { name: "Lưu khoản thu" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Gốc đã thu phải là số nguyên");
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -24,11 +24,11 @@ describe("PaymentForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<PaymentForm loanId="loan-1" scheduleEntryId="entry-1" onSave={onSave} />);
 
-    await user.type(screen.getByLabelText("Received date"), "2026-08-05");
-    await user.type(screen.getByLabelText("Principal received (VND)"), "800000");
-    await user.type(screen.getByLabelText("Interest received (VND)"), "200000");
-    await user.type(screen.getByLabelText("Note"), " Paid in cash ");
-    await user.click(screen.getByRole("button", { name: "Save payment" }));
+    await user.type(screen.getByLabelText("Ngày thu"), "2026-08-05");
+    await user.type(screen.getByLabelText("Gốc đã thu (đ)"), "800000");
+    await user.type(screen.getByLabelText("Lãi đã thu (đ)"), "200000");
+    await user.type(screen.getByLabelText("Ghi chú"), " Paid in cash ");
+    await user.click(screen.getByRole("button", { name: "Lưu khoản thu" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({

@@ -14,6 +14,7 @@ import type {
 } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
+import { translateError, vi } from "../../i18n/vi";
 import { calculationModelLabels, formatMoneyVnd, partialPeriodInterestModeLabels, rateUnitLabels } from "./lendingLabels";
 
 export interface LoanDraft {
@@ -171,7 +172,7 @@ export function LoanForm({ borrowerId, onSave, onCancel }: LoanFormWithCancelPro
       setEntries(generateSchedule(previewVersion(nextDraft)));
       setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not preview schedule");
+      setError(translateError(cause, vi.errors.previewFailed));
     }
   };
 
@@ -183,7 +184,7 @@ export function LoanForm({ borrowerId, onSave, onCancel }: LoanFormWithCancelPro
     try {
       await onSave(draft);
     } catch {
-      setError("Could not save loan");
+      setError(translateError("Could not save loan", vi.errors.genericLoanSave));
     } finally {
       setIsSaving(false);
     }
@@ -192,50 +193,50 @@ export function LoanForm({ borrowerId, onSave, onCancel }: LoanFormWithCancelPro
   return (
     <section className="route-panel" aria-labelledby="loan-form-heading">
       <div className="route-heading">
-        {onCancel ? <Button icon={<ArrowLeft aria-hidden="true" size={18} />} onClick={onCancel}>Borrower</Button> : null}
+        {onCancel ? <Button icon={<ArrowLeft aria-hidden="true" size={18} />} onClick={onCancel}>{vi.borrower.title}</Button> : null}
       </div>
-      <h2 id="loan-form-heading">New loan</h2>
+      <h2 id="loan-form-heading">{vi.loan.new}</h2>
       <form className="lending-form" onSubmit={(event) => { event.preventDefault(); createPreview(); }}>
-        <Field label="Principal (VND)" inputMode="numeric" value={form.principal} onChange={(event) => update("principal", event.target.value)} />
-        <Field label="Disbursement date" type="date" value={form.disbursementDate} onChange={(event) => update("disbursementDate", event.target.value)} />
-        <label className="field" htmlFor="calculation-model"><span>Calculation model</span>
+        <Field label={vi.loan.principal} inputMode="numeric" value={form.principal} onChange={(event) => update("principal", event.target.value)} />
+        <Field label={vi.loan.disbursementDate} type="date" value={form.disbursementDate} onChange={(event) => update("disbursementDate", event.target.value)} />
+        <label className="field" htmlFor="calculation-model"><span>{vi.loan.calculationModel}</span>
           <select id="calculation-model" value={form.calculationModel} onChange={(event) => update("calculationModel", event.target.value as CalculationModel)}>
             {Object.entries(calculationModelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <Field label="Monthly due day" inputMode="numeric" value={form.monthlyDueDay} onChange={(event) => update("monthlyDueDay", event.target.value)} />
-        <Field label="Maturity date" type="date" value={form.maturityDate} onChange={(event) => update("maturityDate", event.target.value)} />
-        <Field label="Rate (%)" inputMode="decimal" value={form.ratePercent} onChange={(event) => update("ratePercent", event.target.value)} />
-        <label className="field" htmlFor="rate-unit"><span>Rate unit</span>
+        <Field label={vi.loan.monthlyDueDay} inputMode="numeric" value={form.monthlyDueDay} onChange={(event) => update("monthlyDueDay", event.target.value)} />
+        <Field label={vi.loan.maturityDate} type="date" value={form.maturityDate} onChange={(event) => update("maturityDate", event.target.value)} />
+        <Field label={vi.loan.rate} inputMode="decimal" value={form.ratePercent} onChange={(event) => update("ratePercent", event.target.value)} />
+        <label className="field" htmlFor="rate-unit"><span>{vi.loan.rateUnit}</span>
           <select id="rate-unit" value={form.rateUnit} onChange={(event) => update("rateUnit", event.target.value as RateUnit)}>
             {Object.entries(rateUnitLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <label className="field" htmlFor="partial-period-interest"><span>Partial-period interest</span>
+        <label className="field" htmlFor="partial-period-interest"><span>{vi.loan.partialPeriod}</span>
           <select id="partial-period-interest" value={form.partialPeriodInterestMode} onChange={(event) => update("partialPeriodInterestMode", event.target.value as PartialPeriodInterestMode)}>
             {Object.entries(partialPeriodInterestModeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <label className="check-field"><input type="checkbox" checked={form.useReminderOverride} onChange={(event) => update("useReminderOverride", event.target.checked)} /> Use reminder override</label>
+        <label className="check-field"><input type="checkbox" checked={form.useReminderOverride} onChange={(event) => update("useReminderOverride", event.target.checked)} /> {vi.reminder.useOverride}</label>
         {form.useReminderOverride ? <div className="reminder-fields">
-          <label className="check-field"><input type="checkbox" checked={form.reminderEnabled} onChange={(event) => update("reminderEnabled", event.target.checked)} /> Enable reminders</label>
-          <Field label="Reminder offset (days)" inputMode="numeric" value={form.reminderOffsetDays} onChange={(event) => update("reminderOffsetDays", event.target.value)} />
-          <Field label="Reminder time" type="time" value={form.reminderTime} onChange={(event) => update("reminderTime", event.target.value)} />
+          <label className="check-field"><input type="checkbox" checked={form.reminderEnabled} onChange={(event) => update("reminderEnabled", event.target.checked)} /> {vi.reminder.enabled}</label>
+          <Field label={vi.reminder.offsetDays} inputMode="numeric" value={form.reminderOffsetDays} onChange={(event) => update("reminderOffsetDays", event.target.value)} />
+          <Field label={vi.reminder.time} type="time" value={form.reminderTime} onChange={(event) => update("reminderTime", event.target.value)} />
         </div> : null}
-        <label className="field" htmlFor="loan-note"><span>Note</span>
+        <label className="field" htmlFor="loan-note"><span>{vi.common.note}</span>
           <textarea id="loan-note" value={form.note} onChange={(event) => update("note", event.target.value)} />
         </label>
         {error ? <p className="form-error" role="alert">{error}</p> : null}
-        <Button icon={<Eye aria-hidden="true" size={18} />} variant="primary" type="submit">Preview schedule</Button>
+        <Button icon={<Eye aria-hidden="true" size={18} />} variant="primary" type="submit">{vi.loan.preview}</Button>
       </form>
       {draft ? <section className="schedule-preview" aria-labelledby="schedule-preview-heading">
-        <h3 id="schedule-preview-heading">Schedule preview</h3>
+        <h3 id="schedule-preview-heading">{vi.loan.preview}</h3>
         <table>
-          <thead><tr><th>Due date</th><th>Principal</th><th>Interest</th></tr></thead>
+          <thead><tr><th>{vi.loan.previewDueDate}</th><th>{vi.loan.previewPrincipal}</th><th>{vi.loan.previewInterest}</th></tr></thead>
           <tbody>{entries.map((entry) => <tr key={entry.id}><td>{entry.dueDate}</td><td>{formatMoneyVnd(entry.expectedPrincipal)}</td><td>{formatMoneyVnd(entry.expectedInterest)}</td></tr>)}</tbody>
         </table>
         <Button icon={<Check aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} onClick={() => void save()}>
-          Confirm and save loan
+          {vi.loan.confirmSave}
         </Button>
       </section> : null}
     </section>
