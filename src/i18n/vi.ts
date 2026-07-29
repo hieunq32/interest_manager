@@ -20,6 +20,8 @@ export const vi = {
       "Borrower saved": "Đã lưu người vay",
       "Borrower archived": "Đã lưu trữ người vay",
       "Loan saved": "Đã lưu khoản vay",
+      "Loan settled": "Đã tất toán khoản vay",
+      "Loan reopened": "Đã mở lại khoản vay",
       "Payment recorded": "Đã ghi nhận khoản thu",
       "Payment corrected": "Đã điều chỉnh giao dịch",
       "Payment cancelled": "Đã hủy giao dịch",
@@ -67,6 +69,7 @@ export const vi = {
     outstandingPrincipal: "Gốc còn phải thu", outstandingInterest: "Lãi còn phải thu", nextDueDate: "Ngày thu tiếp theo",
     versions: "Các phiên bản lịch thu", active: "đang áp dụng", readOnly: "chỉ xem", originalDue: "Ngày đến hạn gốc",
     loanStatusFilter: "Trạng thái khoản vay", collectionStatusFilter: "Trạng thái thu tiền",
+    settlement: "Tất toán khoản vay", settlementDate: "Ngày tất toán", eligibleForSettlement: "Đủ điều kiện tất toán", ineligibleForSettlement: "Chưa đủ điều kiện tất toán", remainingBalance: "Số tiền còn thiếu", confirmSettlement: "Xác nhận tất toán", settledDate: "Ngày tất toán", reopen: "Mở lại khoản vay", reopenReason: "Lý do mở lại khoản vay", confirmReopen: "Xác nhận mở lại", lifecycleHistory: "Lịch sử vòng đời", noLifecycleEvents: "Chưa có lịch sử vòng đời", settled: "Đã tất toán", reopened: "Đã mở lại",
   },
   payment: {
     record: "Ghi nhận khoản thu", history: "Lịch sử thu tiền", receivedDate: "Ngày thu",
@@ -110,7 +113,7 @@ export const vi = {
     nonNegativeRate: "Lãi suất phải là số không âm", adjustmentReasonRequired: "Vui lòng nhập lý do điều chỉnh khi thay đổi lãi suất hoặc đơn vị lãi suất",
     invalidReminderOffset: "Số ngày nhắc trước phải là số nguyên không âm", invalidReminderTime: "Giờ nhắc phải có dạng HH:MM",
     backupPassphraseRequired: "Vui lòng nhập mật khẩu sao lưu", restorePassphraseRequired: "Vui lòng nhập mật khẩu khôi phục",
-    calendarPreparationFailed: "Không thể chuẩn bị lịch Calendar.", unknown: "Đã xảy ra lỗi. Vui lòng thử lại.",
+    calendarPreparationFailed: "Không thể chuẩn bị lịch Calendar.", reopenReasonRequired: "Vui lòng nhập lý do mở lại khoản vay", unknown: "Đã xảy ra lỗi. Vui lòng thử lại.",
   },
 } as const;
 

@@ -6,11 +6,12 @@ import {
   calculateLoanSummary,
   selectCurrentLoanEntries,
 } from "../lending/domain/ledger";
+import { reopenLoan, settleLoan } from "../lending/domain/loanLifecycle";
 import { filterLoans, getLoanCollectionStatus, type LoanCollectionContext } from "../lending/domain/loanSelectors";
 import { buildPaymentCancellation, buildPaymentCorrection, normalizePayment } from "../lending/domain/paymentCorrections";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
-import type { Borrower, Loan, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
+import type { Borrower, Loan, LoanLifecycleEvent, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import { buildIcsCalendar, buildScheduleCalendarEvents } from "../lending/reminders/ical";
 import { DEFAULT_REMINDER_SETTINGS, resolveReminderSettings } from "../lending/reminders/reminderSettings";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
@@ -131,6 +132,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentTransaction[]>([]);
   const [paymentAdjustments, setPaymentAdjustments] = useState<PaymentAdjustment[]>([]);
+  const [lifecycleEvents, setLifecycleEvents] = useState<LoanLifecycleEvent[]>([]);
   const [promises, setPromises] = useState<PromiseToPay[]>([]);
   const [reminderSettings, setReminderSettings] = useState(DEFAULT_REMINDER_SETTINGS);
   const [mode, setMode] = useState<"none" | "create-borrower" | "edit-borrower" | "create-loan">("none");
@@ -143,7 +145,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   }, [store]);
 
   const refreshLendingData = useCallback(async () => {
-    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPaymentHistory, nextPaymentAdjustments, nextPromises, nextReminderSettings] = await Promise.all([
+    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPaymentHistory, nextPaymentAdjustments, nextLifecycleEvents, nextPromises, nextReminderSettings] = await Promise.all([
       repository.listBorrowers(),
       repository.listLoans(),
       repository.listScheduleVersions(),
@@ -151,6 +153,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       repository.listPayments(),
       repository.listPaymentHistory(),
       repository.listPaymentAdjustments(),
+      repository.listLoanLifecycleEvents(),
       repository.listPromises(),
       repository.getReminderSettings(),
     ]);
@@ -161,6 +164,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setPayments(nextPayments);
     setPaymentHistory(nextPaymentHistory);
     setPaymentAdjustments(nextPaymentAdjustments);
+    setLifecycleEvents(nextLifecycleEvents);
     setPromises(nextPromises);
     setReminderSettings(nextReminderSettings ?? DEFAULT_REMINDER_SETTINGS);
   }, [repository]);
@@ -291,6 +295,43 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     }));
     await Promise.all([refreshHealth(), refreshLendingData()]);
     setMessage("Payment cancelled");
+  };
+
+  const settleLoanFor = async (loanToSettle: Loan, settlementDate: string) => {
+    const now = new Date().toISOString();
+    const mutation = settleLoan({
+      loan: loanToSettle,
+      summary: calculateLoanSummary({
+        loanId: loanToSettle.id,
+        entries: selectCurrentLoanEntries({
+          entries: scheduleEntries,
+          versions: scheduleVersions.filter((version) => version.loanId === loanToSettle.id),
+          activeScheduleVersionId: loanToSettle.defaultScheduleVersionId,
+        }),
+        payments: payments.filter((payment) => payment.loanId === loanToSettle.id),
+        promises: promises.filter((promise) => promise.loanId === loanToSettle.id),
+        today: todayInVietnam(),
+      }),
+      settlementDate,
+      eventId: crypto.randomUUID(),
+      now,
+    });
+    await repository.saveLoanLifecycleMutation(mutation);
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Loan settled");
+  };
+
+  const reopenLoanFor = async (loanToReopen: Loan, reason: string) => {
+    const now = new Date().toISOString();
+    await repository.saveLoanLifecycleMutation(reopenLoan({
+      loan: loanToReopen,
+      reason,
+      eventId: crypto.randomUUID(),
+      effectiveDate: todayInVietnam(),
+      now,
+    }));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Loan reopened");
   };
 
   const savePromise = async (value: PromiseToPay) => {
@@ -529,6 +570,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         paymentHistory={paymentHistory.filter((payment) => payment.loanId === loan.id)}
         paymentAdjustments={paymentAdjustments.filter((adjustment) => adjustment.loanId === loan.id)}
         promises={promises.filter((promise) => promise.loanId === loan.id)}
+        lifecycleEvents={lifecycleEvents.filter((event) => event.loanId === loan.id)}
         today={todayInVietnam()}
         calendarExportVersionId={loan.calendarExportVersionId}
         onBack={() => navigate({ name: "borrower", borrowerId: loan.borrowerId })}
@@ -539,6 +581,8 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         onUpdatePromise={updatePromise}
         onSaveRevision={(input) => saveRevision(loan, input)}
         onSaveReminderOverride={(value) => saveLoanReminderOverride(loan, value)}
+        onSettle={(settlementDate) => settleLoanFor(loan, settlementDate)}
+        onReopen={(reason) => reopenLoanFor(loan, reason)}
         onExportCalendar={() => void prepareCalendarExport({
           loan,
           borrowerName: loanBorrower?.displayName ?? vi.borrower.unknown,

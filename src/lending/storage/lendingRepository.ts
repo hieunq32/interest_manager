@@ -172,8 +172,20 @@ export class IndexedDbLendingRepository implements LendingRepository {
   }
 
   async saveLoanLifecycleMutation(value: { loan: Loan; event: LoanLifecycleEvent }): Promise<void> {
+    if (value.event.loanId !== value.loan.id) {
+      throw new Error("lifecycle event loan ID must match loan ID");
+    }
+    if ((value.event.action === "settled") !== (value.loan.status === "settled")) {
+      throw new Error("lifecycle event action must match loan status");
+    }
+
     await this.store.upsertRecords([
-      toGenericRecord(LENDING_RECORD_TYPES.loan, value.loan),
+      toGenericRecord(
+        LENDING_RECORD_TYPES.loan,
+        value.event.action === "settled"
+          ? invalidateCalendarExport(value.loan, value.loan.updatedAt)
+          : value.loan,
+      ),
       toGenericRecord(LENDING_RECORD_TYPES.loanLifecycleEvent, value.event),
     ]);
   }

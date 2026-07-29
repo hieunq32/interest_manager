@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import {
   calculateEntryStatus,
@@ -6,9 +6,11 @@ import {
   calculateLoanSummary,
   selectCurrentLoanEntries,
 } from "../domain/ledger";
+import { evaluateSettlementEligibility } from "../domain/loanLifecycle";
 import type { RevisionInput } from "../domain/revisions";
-import type { Loan, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../domain/types";
+import type { DateOnly, Loan, LoanLifecycleEvent, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../domain/types";
 import { Button } from "../../ui/Button";
+import { Field } from "../../ui/Field";
 import { PaymentForm } from "./PaymentForm";
 import { PaymentCorrectionForm } from "./PaymentCorrectionForm";
 import { PromiseForm } from "./PromiseForm";
@@ -27,6 +29,7 @@ export interface LoanDetailProps {
   paymentAdjustments: PaymentAdjustment[];
   promises: PromiseToPay[];
   today: string;
+  lifecycleEvents: LoanLifecycleEvent[];
   calendarExportVersionId?: string;
   onBack(): void;
   onSavePayment(value: PaymentTransaction): Promise<void>;
@@ -37,6 +40,8 @@ export interface LoanDetailProps {
   onSaveRevision(input: RevisionInput): Promise<void>;
   onSaveReminderOverride(value?: ReminderOverride): Promise<void>;
   onExportCalendar(versionId: string): void;
+  onSettle(settlementDate: DateOnly): Promise<void>;
+  onReopen(reason: string): Promise<void>;
 }
 
 export interface PaymentHistoryView {
@@ -73,6 +78,7 @@ export function LoanDetail({
   paymentAdjustments,
   promises,
   today,
+  lifecycleEvents = [],
   calendarExportVersionId,
   onBack,
   onSavePayment,
@@ -83,10 +89,16 @@ export function LoanDetail({
   onSaveRevision,
   onSaveReminderOverride,
   onExportCalendar,
+  onSettle,
+  onReopen,
 }: LoanDetailProps) {
   const [entryForm, setEntryForm] = useState<EntryForm>();
   const [paymentCorrection, setPaymentCorrection] = useState<PaymentCorrection>();
   const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [settlementDate, setSettlementDate] = useState(today);
+  const [showReopenForm, setShowReopenForm] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenError, setReopenError] = useState("");
   const activeVersion = versions.find((version) => version.id === loan.defaultScheduleVersionId);
   const currentEntries = selectCurrentLoanEntries({
     entries,
@@ -99,6 +111,8 @@ export function LoanDetail({
     maturityDate: loan.maturityDate,
   };
   const summary = calculateLoanSummary({ loanId: loan.id, entries: currentEntries, payments, promises, today });
+  const settlementEligibility = evaluateSettlementEligibility(summary);
+  const isSettled = loan.status === "settled";
   const calendarState = calendarExportVersionId === loan.defaultScheduleVersionId
     ? vi.calendar.matches
     : calendarExportVersionId
@@ -141,12 +155,26 @@ export function LoanDetail({
     setPaymentCorrection(undefined);
   };
 
+  const settle = async () => {
+    await onSettle(settlementDate);
+  };
+
+  const reopen = async () => {
+    const reason = reopenReason.trim();
+    if (!reason) {
+      setReopenError(vi.errors.reopenReasonRequired);
+      return;
+    }
+    setReopenError("");
+    await onReopen(reason);
+  };
+
   return (
     <section className="route-panel" aria-labelledby="loan-detail-heading">
       <div className="route-heading">
         <Button icon={<ArrowLeft aria-hidden="true" size={18} />} onClick={onBack}>{vi.borrower.title}</Button>
-        <Button icon={<Pencil aria-hidden="true" size={18} />} onClick={() => setShowRevisionForm((value) => !value)}>{vi.revision.title}</Button>
-        <Button icon={<CalendarDays aria-hidden="true" size={18} />} variant="primary" onClick={() => onExportCalendar(loan.defaultScheduleVersionId)}>{vi.calendar.export}</Button>
+        {!isSettled ? <Button icon={<Pencil aria-hidden="true" size={18} />} onClick={() => setShowRevisionForm((value) => !value)}>{vi.revision.title}</Button> : null}
+        {!isSettled ? <Button icon={<CalendarDays aria-hidden="true" size={18} />} variant="primary" onClick={() => onExportCalendar(loan.defaultScheduleVersionId)}>{vi.calendar.export}</Button> : null}
       </div>
       <h2 id="loan-detail-heading">{vi.loan.details}</h2>
       <p>{borrowerName}</p>
@@ -169,10 +197,10 @@ export function LoanDetail({
 
       <section className="schedule-preview" aria-labelledby="loan-reminders-heading">
         <h3 id="loan-reminders-heading">{vi.reminder.loan}</h3>
-        <LoanReminderOverrideForm value={loan.reminderOverride} onSave={onSaveReminderOverride} />
+        {!isSettled ? <LoanReminderOverrideForm value={loan.reminderOverride} onSave={onSaveReminderOverride} /> : <p>{vi.loan.readOnly}</p>}
       </section>
 
-      {showRevisionForm && activeVersion ? <section className="schedule-preview" aria-labelledby="revision-heading">
+      {!isSettled && showRevisionForm && activeVersion ? <section className="schedule-preview" aria-labelledby="revision-heading">
         <h3 id="revision-heading">{vi.revision.newVersion}</h3>
         <ScheduleRevisionForm current={activeVersion} onSave={saveRevision} />
       </section> : null}
@@ -199,8 +227,8 @@ export function LoanDetail({
                     <td>{formatMoneyVnd(entry.expectedPrincipal)} / {formatMoneyVnd(totals.receivedPrincipal)} / {formatMoneyVnd(totals.outstandingPrincipal)}</td>
                     <td>{formatMoneyVnd(entry.expectedInterest)} / {formatMoneyVnd(totals.receivedInterest)} / {formatMoneyVnd(totals.outstandingInterest)}</td>
                     <td>{isCurrent ? <div className="button-row">
-                      {loan.status !== "settled" ? <Button icon={<CircleDollarSign aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "payment", entryId: entry.id })}>{vi.payment.record}</Button> : null}
-                      <Button icon={<CalendarDays aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "promise", entryId: entry.id })}>{vi.promise.record}</Button>
+                      {!isSettled ? <Button icon={<CircleDollarSign aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "payment", entryId: entry.id })}>{vi.payment.record}</Button> : null}
+                      {!isSettled ? <Button icon={<CalendarDays aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "promise", entryId: entry.id })}>{vi.promise.record}</Button> : null}
                     </div> : vi.loan.readOnly}</td>
                   </tr>;
                 })}</tbody>
@@ -226,11 +254,32 @@ export function LoanDetail({
         <h3 id="payments-heading">{vi.payment.history}</h3>
         {payments.length === 0 ? <p className="empty-state">{vi.payment.noPayments}</p> : <table>
           <thead><tr><th>{vi.payment.receivedDate}</th><th>{vi.payment.scheduleEntry}</th><th>{vi.loan.principal}</th><th>{vi.loan.interest}</th><th>{vi.common.note}</th><th>{vi.common.actions}</th></tr></thead>
-          <tbody>{payments.map((payment) => <tr key={payment.id}><td>{payment.receivedAt}</td><td>{payment.scheduleEntryId ?? vi.common.unassigned}</td><td>{formatMoneyVnd(payment.principalAmount)}</td><td>{formatMoneyVnd(payment.interestAmount)}</td><td>{payment.note ?? ""}</td><td>{loan.status !== "settled" && (payment.status === undefined || payment.status === "active") ? <div className="button-row">
+          <tbody>{payments.map((payment) => <tr key={payment.id}><td>{payment.receivedAt}</td><td>{payment.scheduleEntryId ?? vi.common.unassigned}</td><td>{formatMoneyVnd(payment.principalAmount)}</td><td>{formatMoneyVnd(payment.interestAmount)}</td><td>{payment.note ?? ""}</td><td>{!isSettled && (payment.status === undefined || payment.status === "active") ? <div className="button-row">
             <Button icon={<Pencil aria-hidden="true" size={16} />} title={vi.payment.edit} onClick={() => setPaymentCorrection({ payment, mode: "edit" })}>{vi.payment.edit}</Button>
             <Button icon={<Trash2 aria-hidden="true" size={16} />} title={vi.payment.void} variant="danger" onClick={() => setPaymentCorrection({ payment, mode: "void" })}>{vi.payment.void}</Button>
           </div> : null}</td></tr>)}</tbody>
         </table>}
+      </section>
+
+      <section className="schedule-preview" aria-labelledby="loan-settlement-heading">
+        <h3 id="loan-settlement-heading">{vi.loan.settlement}</h3>
+        {isSettled ? <>
+          <p>{vi.loan.settledDate}: {loan.settledAt ?? vi.common.none}</p>
+          <Button icon={<RotateCcw aria-hidden="true" size={16} />} onClick={() => setShowReopenForm((value) => !value)}>{vi.loan.reopen}</Button>
+          {showReopenForm ? <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void reopen(); }}>
+            <label className="field" htmlFor="loan-reopen-reason"><span>{vi.loan.reopenReason}</span>
+              <textarea id="loan-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} />
+            </label>
+            {reopenError ? <p className="form-error" role="alert">{reopenError}</p> : null}
+            <Button icon={<RotateCcw aria-hidden="true" size={16} />} variant="primary" type="submit">{vi.loan.confirmReopen}</Button>
+          </form> : null}
+        </> : <>
+          <p>{settlementEligibility.eligible ? vi.loan.eligibleForSettlement : vi.loan.ineligibleForSettlement}</p>
+          {!settlementEligibility.eligible ? <p>{vi.loan.remainingBalance}: {formatMoneyVnd(settlementEligibility.outstandingPrincipal + settlementEligibility.outstandingInterest)}</p> : <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void settle(); }}>
+            <Field id="loan-settlement-date" label={vi.loan.settlementDate} type="date" value={settlementDate} onChange={(event) => setSettlementDate(event.target.value)} />
+            <Button icon={<Check aria-hidden="true" size={16} />} variant="primary" type="submit">{vi.loan.confirmSettlement}</Button>
+          </form>}
+        </>}
       </section>
 
       {paymentHistoryViews.length > 0 ? <section className="schedule-preview" aria-label={vi.payment.adjustmentHistory}>
@@ -249,11 +298,16 @@ export function LoanDetail({
         <h3 id="promises-heading">{vi.promise.history}</h3>
         {promises.length === 0 ? <p className="empty-state">{vi.promise.noPromises}</p> : <table>
           <thead><tr><th>{vi.promise.promisedDate}</th><th>{vi.payment.scheduleEntry}</th><th>{vi.promise.promise}</th><th>{vi.common.status}</th><th>{vi.common.actions}</th></tr></thead>
-          <tbody>{promises.map((promise) => <tr key={promise.id}><td>{promise.promisedDate}</td><td>{promise.scheduleEntryId}</td><td>{promise.note}</td><td>{entryStatusLabel(promise.status)}</td><td>{promise.status === "open" ? <div className="button-row">
+          <tbody>{promises.map((promise) => <tr key={promise.id}><td>{promise.promisedDate}</td><td>{promise.scheduleEntryId}</td><td>{promise.note}</td><td>{entryStatusLabel(promise.status)}</td><td>{!isSettled && promise.status === "open" ? <div className="button-row">
             <Button icon={<Check aria-hidden="true" size={16} />} onClick={() => void changePromiseStatus(promise, "fulfilled")}>{vi.promise.fulfil} {promise.id}</Button>
             <Button icon={<X aria-hidden="true" size={16} />} variant="danger" onClick={() => void changePromiseStatus(promise, "cancelled")}>{vi.promise.cancel} {promise.id}</Button>
           </div> : ""}</td></tr>)}</tbody>
         </table>}
+      </section>
+
+      <section className="schedule-preview" aria-labelledby="lifecycle-history-heading">
+        <h3 id="lifecycle-history-heading">{vi.loan.lifecycleHistory}</h3>
+        {lifecycleEvents.length === 0 ? <p className="empty-state">{vi.loan.noLifecycleEvents}</p> : lifecycleEvents.map((event) => <p key={event.id}>{event.action === "settled" ? vi.loan.settled : vi.loan.reopened}: {event.effectiveDate}{event.reason ? ` - ${event.reason}` : ""}</p>)}
       </section>
     </section>
   );

@@ -356,6 +356,75 @@ describe("IndexedDbLendingRepository", () => {
     await expect(repository.listLoanLifecycleEvents(loan.id)).resolves.toEqual([event]);
   });
 
+  it("rejects a lifecycle event that belongs to another loan", async () => {
+    const repository = createRepository();
+    const settledLoan: Loan = { ...loan, status: "settled", settledAt: "2026-07-28", updatedAt: "2026-07-28T02:00:00.000Z" };
+    const event: LoanLifecycleEvent = {
+      id: "loan-lifecycle-event-wrong-loan",
+      loanId: "another-loan",
+      action: "settled",
+      effectiveDate: "2026-07-28",
+      createdAt: "2026-07-28T02:00:00.000Z",
+    };
+
+    await expect(repository.saveLoanLifecycleMutation({ loan: settledLoan, event }))
+      .rejects.toThrow("lifecycle event loan ID must match loan ID");
+  });
+
+  it("rejects a lifecycle action that conflicts with the loan status", async () => {
+    const repository = createRepository();
+    const event: LoanLifecycleEvent = {
+      id: "loan-lifecycle-event-wrong-action",
+      loanId: loan.id,
+      action: "reopened",
+      effectiveDate: "2026-07-28",
+      createdAt: "2026-07-28T02:00:00.000Z",
+    };
+
+    await expect(repository.saveLoanLifecycleMutation({ loan: { ...loan, status: "settled" }, event }))
+      .rejects.toThrow("lifecycle event action must match loan status");
+  });
+
+  it("clears settled calendar exports and preserves lifecycle events through restore", async () => {
+    const source = createRepository();
+    const settledLoan: Loan = {
+      ...loan,
+      status: "settled",
+      settledAt: "2026-07-28",
+      calendarExportVersionId: version.id,
+      updatedAt: "2026-07-28T02:00:00.000Z",
+    };
+    const event: LoanLifecycleEvent = {
+      id: "loan-lifecycle-event-restore",
+      loanId: loan.id,
+      action: "settled",
+      effectiveDate: "2026-07-28",
+      createdAt: "2026-07-28T02:00:00.000Z",
+    };
+    const unrelatedEvent: LoanLifecycleEvent = {
+      ...event,
+      id: "loan-lifecycle-event-other-loan",
+      loanId: "other-loan",
+    };
+
+    await source.saveLoanLifecycleMutation({ loan: settledLoan, event });
+    await source.saveLoanLifecycleMutation({
+      loan: { ...loan, id: "other-loan", status: "settled", settledAt: "2026-07-28" },
+      event: unrelatedEvent,
+    });
+
+    await expect(source.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+      expect.objectContaining({ id: "other-loan" }),
+    ]);
+    await expect(source.listLoanLifecycleEvents(loan.id)).resolves.toEqual([event]);
+
+    const target = createRepository();
+    await target.replaceAllDomainRecords(await source.listAllDomainRecords());
+
+    await expect(target.listLoanLifecycleEvents(loan.id)).resolves.toEqual([event]);
+  });
+
   it("saves and replaces a complete loan bundle with one record-store batch", async () => {
     const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
     const repository = new IndexedDbLendingRepository(store);

@@ -223,43 +223,17 @@ describe("App", () => {
     expect(screen.getByLabelText("Giờ nhắc")).toHaveValue("09:30");
   });
 
-  it("downloads prepared calendar content as a deterministic ICS file without paid or closed events", async () => {
-    const user = userEvent.setup();
+  it("hides calendar export controls for settled loans", async () => {
     const dbName = nextDbName();
     const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
     const { borrower, loan, version, entry } = lendingHistory();
     await repository.saveBorrower(borrower);
     await repository.saveLoanBundle({ loan: { ...loan, status: "settled" }, version, entries: [entry] });
     window.location.hash = `#/loans/${loan.id}`;
-    const originalCreateElement = document.createElement.bind(document);
-    let createdAnchor: HTMLAnchorElement | undefined;
-    let createdBlob: Blob | undefined;
-    const createElement = vi.spyOn(document, "createElement").mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
-      const element = originalCreateElement(tagName, options);
-      if (tagName === "a") {
-        createdAnchor = element as HTMLAnchorElement;
-        vi.spyOn(createdAnchor, "click").mockImplementation(() => undefined);
-      }
-      return element;
-    }) as typeof document.createElement);
-    const createObjectURL = vi.fn((blob: Blob) => {
-      createdBlob = blob;
-      return "blob:calendar";
-    });
-    const revokeObjectURL = vi.fn();
-    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
 
     render(<App dbName={dbName} />);
     await screen.findByRole("heading", { name: "Chi tiết khoản vay" });
-    await user.click(screen.getByRole("button", { name: "Xuất lịch Calendar" }));
-
-    await waitFor(() => expect(createdAnchor?.click).toHaveBeenCalledTimes(1));
-    expect(createdAnchor?.download).toMatch(/^interest-manager-calendar-\d{4}-\d{2}-\d{2}\.ics$/);
-    expect(createdBlob?.type).toBe("text/calendar;charset=utf-8");
-    expect(await createdBlob?.text()).not.toContain("BEGIN:VEVENT");
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:calendar");
-    createElement.mockRestore();
-    vi.unstubAllGlobals();
+    expect(screen.queryByRole("button", { name: "Xuất lịch Calendar" })).not.toBeInTheDocument();
   });
 
   it("backs up and restores typed lending records without replacing unrelated shared records", async () => {
@@ -527,8 +501,10 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Điều chỉnh lịch thu" }));
     await user.clear(screen.getByLabelText("Ngày áp dụng"));
     await user.type(screen.getByLabelText("Ngày áp dụng"), "2026-08-01");
-    await user.clear(screen.getByLabelText("Ngày tất toán"));
-    await user.type(screen.getByLabelText("Ngày tất toán"), "2027-01-15");
+    const revisionMaturityDate = screen.getAllByLabelText<HTMLInputElement>("Ngày tất toán").find((input) => input.value === "2026-12-15");
+    expect(revisionMaturityDate).toBeDefined();
+    await user.clear(revisionMaturityDate!);
+    await user.type(revisionMaturityDate!, "2027-01-15");
     await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
     await screen.findByText("Đã điều chỉnh lịch thu; lịch Calendar cần xuất lại");
     await waitFor(async () => expect(await repository.listScheduleVersions(loan.id)).toHaveLength(2));
@@ -724,6 +700,46 @@ describe("App", () => {
     await expect(repository.listPayments(history.loan.id)).resolves.toEqual([]);
     expect(confirm).toHaveBeenCalledWith("Xác nhận hủy giao dịch");
     confirm.mockRestore();
+  });
+
+  it("settles an eligible loan and reopens it with an auditable reason", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    await repository.saveBorrower(history.borrower);
+    await repository.saveLoanBundle({ loan: history.loan, version: history.version, entries: [history.entry] });
+    await repository.savePayment({
+      ...history.payment,
+      principalAmount: history.entry.expectedPrincipal,
+      interestAmount: history.entry.expectedInterest,
+    });
+    window.location.hash = `#/loans/${history.loan.id}`;
+    render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Chi tiết khoản vay" });
+    await user.clear(screen.getByLabelText("Ngày tất toán"));
+    await user.type(screen.getByLabelText("Ngày tất toán"), "2026-07-15");
+    await user.click(screen.getByRole("button", { name: "Xác nhận tất toán" }));
+    await screen.findByText("Đã tất toán khoản vay");
+    await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([
+      expect.objectContaining({ status: "settled", settledAt: "2026-07-15" }),
+    ]);
+    await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual([
+      expect.objectContaining({ action: "settled", effectiveDate: "2026-07-15" }),
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Mở lại khoản vay" }));
+    await user.type(screen.getByLabelText("Lý do mở lại khoản vay"), "Payment correction required");
+    await user.click(screen.getByRole("button", { name: "Xác nhận mở lại" }));
+    await screen.findByText("Đã mở lại khoản vay");
+    await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([
+      expect.not.objectContaining({ settledAt: expect.any(String) }),
+    ]);
+    await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual([
+      expect.objectContaining({ action: "settled", effectiveDate: "2026-07-15" }),
+      expect.objectContaining({ action: "reopened", reason: "Payment correction required" }),
+    ]);
   });
 
   it("filters borrower loans from current collection data without changing IndexedDB", async () => {
