@@ -3,7 +3,7 @@ export const vi = {
   navigation: { home: "Trang chủ", settings: "Cài đặt" },
   common: {
     save: "Lưu", cancel: "Hủy", back: "Quay lại", note: "Ghi chú", actions: "Thao tác", status: "Trạng thái",
-    to: "đến", none: "Không có", unassigned: "Chưa phân bổ", primaryNavigation: "Điều hướng chính", systemStatus: "Trạng thái hệ thống",
+    to: "đến", none: "Không có", all: "Tất cả", unassigned: "Chưa phân bổ", primaryNavigation: "Điều hướng chính", systemStatus: "Trạng thái hệ thống",
   },
   shellStatus: {
     online: "Đang online",
@@ -54,6 +54,7 @@ export const vi = {
     archive: "Lưu trữ người vay", displayName: "Tên hiển thị", phone: "Số điện thoại",
     note: "Ghi chú", loans: "Các khoản vay", noBorrowers: "Chưa có người vay nào.",
     noLoans: "Người vay này chưa có khoản vay nào.", notFound: "Không tìm thấy người vay",
+    searchBorrower: "Tìm người vay", borrowerStatusFilter: "Trạng thái người vay", noSearchResults: "Không tìm thấy kết quả phù hợp.",
   },
   loan: {
     title: "Khoản vay", new: "Thêm khoản vay", details: "Chi tiết khoản vay", notFound: "Không tìm thấy khoản vay",
@@ -63,6 +64,7 @@ export const vi = {
     preview: "Xem trước lịch thu", previewDueDate: "Ngày đến hạn", previewPrincipal: "Gốc", previewInterest: "Lãi", interest: "Lãi", confirmSave: "Xác nhận và lưu khoản vay", currentBalance: "Dư nợ hiện tại",
     outstandingPrincipal: "Gốc còn phải thu", outstandingInterest: "Lãi còn phải thu", nextDueDate: "Ngày thu tiếp theo",
     versions: "Các phiên bản lịch thu", active: "đang áp dụng", readOnly: "chỉ xem", originalDue: "Ngày đến hạn gốc",
+    loanStatusFilter: "Trạng thái khoản vay", collectionStatusFilter: "Trạng thái thu tiền",
   },
   payment: {
     record: "Ghi nhận khoản thu", history: "Lịch sử thu tiền", receivedDate: "Ngày thu",

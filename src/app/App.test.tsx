@@ -685,6 +685,36 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Xóa cấu hình nhắc riêng" }));
     await waitFor(async () => expect((await repository.listLoans())[0]).not.toHaveProperty("reminderOverride"));
   });
+
+  it("filters borrower loans from current collection data without changing IndexedDB", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    const entry = {
+      ...history.entry,
+      dueDate: "2020-01-05",
+      expectedPrincipal: 1_000_000,
+      expectedInterest: 20_000,
+    };
+    await repository.saveBorrower(history.borrower);
+    await repository.saveLoanBundle({ loan: history.loan, version: history.version, entries: [entry] });
+    await repository.savePayment({
+      ...history.payment,
+      scheduleEntryId: entry.id,
+      principalAmount: entry.expectedPrincipal,
+      interestAmount: entry.expectedInterest,
+    });
+    const recordsBeforeFiltering = await repository.listAllDomainRecords();
+    window.location.hash = `#/borrowers/${history.borrower.id}`;
+
+    render(<App dbName={dbName} />);
+
+    expect(await screen.findByRole("heading", { name: history.borrower.displayName })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Trạng thái thu tiền"), "paid");
+    expect(screen.getByRole("button", { name: /1\.000\.000/ })).toBeInTheDocument();
+    expect(await repository.listAllDomainRecords()).toEqual(recordsBeforeFiltering);
+  });
 });
 
 function lendingHistory(): {

@@ -6,6 +6,8 @@ import {
   calculateLoanSummary,
   selectCurrentLoanEntries,
 } from "../lending/domain/ledger";
+import { filterLoans, getLoanCollectionStatus, type LoanCollectionContext } from "../lending/domain/loanSelectors";
+import { normalizePayment } from "../lending/domain/paymentCorrections";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
 import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
@@ -428,6 +430,22 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       today: todayInVietnam(),
     }));
 
+  const loanCollectionContexts = useMemo<LoanCollectionContext[]>(() => loans.map((loan) => ({
+    loan,
+    entries: selectCurrentLoanEntries({
+      entries: scheduleEntries,
+      versions: scheduleVersions.filter((version) => version.loanId === loan.id),
+      activeScheduleVersionId: loan.defaultScheduleVersionId,
+    }),
+    payments: payments.filter((payment) => payment.loanId === loan.id && normalizePayment(payment).status === "active"),
+    promises: promises.filter((promise) => promise.loanId === loan.id),
+    today: todayInVietnam(),
+  })), [loans, payments, promises, scheduleEntries, scheduleVersions]);
+  const collectionStatuses = useMemo(
+    () => Object.fromEntries(loanCollectionContexts.map((context) => [context.loan.id, getLoanCollectionStatus(context)])),
+    [loanCollectionContexts],
+  );
+
   const routeContent = (() => {
     if (route.name === "settings") {
       return (
@@ -461,7 +479,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       if (mode === "create-loan") {
         return <LoanForm borrowerId={borrower.id} onSave={saveLoan} onCancel={() => setMode("none")} />;
       }
-      return <BorrowerDetail borrower={borrower} loans={loans.filter((candidate) => candidate.borrowerId === borrower.id)} onBack={() => navigate({ name: "dashboard" })} onEdit={() => setMode("edit-borrower")} onCreateLoan={() => setMode("create-loan")} onSelectLoan={(loanId) => navigate({ name: "loan", loanId })} />;
+      return <BorrowerDetail borrower={borrower} loans={filterLoans({ contexts: loanCollectionContexts, filter: { borrowerId: borrower.id } })} collectionStatuses={collectionStatuses} onBack={() => navigate({ name: "dashboard" })} onEdit={() => setMode("edit-borrower")} onCreateLoan={() => setMode("create-loan")} onSelectLoan={(loanId) => navigate({ name: "loan", loanId })} />;
     }
     if (route.name === "loan") {
       if (!loan) {
