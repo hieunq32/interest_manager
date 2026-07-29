@@ -107,4 +107,10 @@ describe("schedule generation", () => {
       ["2026-11-05", "2026-12-15"],
     ]);
   });
+
+  it("rejects an effective date before disbursement", () => {
+    expect(() =>
+      buildScheduleDates(version({ effectiveDate: "2026-06-19" })),
+    ).toThrow(/effectiveDate.*disbursementDate/i);
+  });
 });

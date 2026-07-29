@@ -26,8 +26,9 @@ describe("ScheduleRevisionForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<ScheduleRevisionForm current={current} onSave={onSave} />);
 
-    await user.clear(screen.getByLabelText("Rate (decimal)"));
-    await user.type(screen.getByLabelText("Rate (decimal)"), "0.03");
+    expect(screen.getByLabelText("Rate (%)")).toHaveValue("2");
+    await user.clear(screen.getByLabelText("Rate (%)"));
+    await user.type(screen.getByLabelText("Rate (%)"), "3");
     await user.click(screen.getByRole("button", { name: "Save revision" }));
     expect(screen.getByRole("alert")).toHaveTextContent(/reason/i);
 
@@ -55,6 +56,39 @@ describe("ScheduleRevisionForm", () => {
       previous: current,
       changes: { maturityDate: "2027-01-15" },
       adjustmentReason: undefined,
+    });
+  });
+
+  it("rejects blank principal and rate values before numeric parsing", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<ScheduleRevisionForm current={current} onSave={onSave} />);
+
+    await user.clear(screen.getByLabelText("Principal base (VND)"));
+    await user.click(screen.getByRole("button", { name: "Save revision" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Principal base must be a positive whole number");
+
+    await user.type(screen.getByLabelText("Principal base (VND)"), "10000000");
+    await user.clear(screen.getByLabelText("Rate (%)"));
+    await user.click(screen.getByRole("button", { name: "Save revision" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Rate must be a non-negative number");
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a two-percent input back to the stored decimal rate", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<ScheduleRevisionForm current={{ ...current, rateValue: 0.03 }} onSave={onSave} />);
+
+    await user.clear(screen.getByLabelText("Rate (%)"));
+    await user.type(screen.getByLabelText("Rate (%)"), "2");
+    await user.type(screen.getByLabelText("Adjustment reason"), "Agreed reduction");
+    await user.click(screen.getByRole("button", { name: "Save revision" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      changes: { rateValue: 0.02 },
+      adjustmentReason: "Agreed reduction",
     });
   });
 });

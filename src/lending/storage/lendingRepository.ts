@@ -61,6 +61,11 @@ function toGenericRecord<T extends LendingRecordType>(
   return record as unknown as GenericRecord;
 }
 
+function invalidateCalendarExport(loan: Loan, updatedAt: string): Loan {
+  const { calendarExportVersionId: _calendarExportVersionId, ...current } = loan;
+  return { ...current, updatedAt };
+}
+
 export class IndexedDbLendingRepository implements LendingRepository {
   constructor(private readonly store: IndexedDbRecordStore) {}
 
@@ -117,7 +122,11 @@ export class IndexedDbLendingRepository implements LendingRepository {
   }
 
   async savePayment(value: PaymentTransaction): Promise<void> {
-    await this.store.upsertRecord(toGenericRecord(LENDING_RECORD_TYPES.payment, value));
+    await this.saveLoanCalendarMutation(
+      value.loanId,
+      value.createdAt,
+      toGenericRecord(LENDING_RECORD_TYPES.payment, value),
+    );
   }
 
   async listPromises(loanId?: string): Promise<PromiseToPay[]> {
@@ -126,7 +135,11 @@ export class IndexedDbLendingRepository implements LendingRepository {
   }
 
   async savePromise(value: PromiseToPay): Promise<void> {
-    await this.store.upsertRecord(toGenericRecord(LENDING_RECORD_TYPES.promise, value));
+    await this.saveLoanCalendarMutation(
+      value.loanId,
+      value.updatedAt,
+      toGenericRecord(LENDING_RECORD_TYPES.promise, value),
+    );
   }
 
   async getReminderSettings(): Promise<ReminderSettings | undefined> {
@@ -140,13 +153,19 @@ export class IndexedDbLendingRepository implements LendingRepository {
     const existing = existingRecords.find((candidate) => candidate.id === LENDING_REMINDER_SETTINGS_RECORD_ID);
     const now = new Date().toISOString();
 
-    await this.store.upsertRecord({
+    const settingsRecord: GenericRecord = {
       id: LENDING_REMINDER_SETTINGS_RECORD_ID,
       type: LENDING_RECORD_TYPES.reminderSettings,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       data: value as unknown as GenericRecord["data"],
-    });
+    };
+    const exportedLoans = (await this.listLoans()).filter((loan) => loan.calendarExportVersionId !== undefined);
+    await this.store.upsertRecords([
+      settingsRecord,
+      ...exportedLoans.map((loan) =>
+        toGenericRecord(LENDING_RECORD_TYPES.loan, invalidateCalendarExport(loan, now))),
+    ]);
   }
 
   async listAllDomainRecords(): Promise<GenericRecord[]> {
@@ -164,5 +183,21 @@ export class IndexedDbLendingRepository implements LendingRepository {
   private async listData<T extends LendingRecordType>(type: T): Promise<LendingRecordData[T][]> {
     const records = await this.store.listRecordsByType(type);
     return records.map((record) => record.data as unknown as LendingRecordData[T]);
+  }
+
+  private async saveLoanCalendarMutation(
+    loanId: string,
+    updatedAt: string,
+    mutationRecord: GenericRecord,
+  ): Promise<void> {
+    const loan = (await this.listLoans()).find((candidate) => candidate.id === loanId);
+    const records = [mutationRecord];
+    if (loan?.calendarExportVersionId !== undefined) {
+      records.push(toGenericRecord(
+        LENDING_RECORD_TYPES.loan,
+        invalidateCalendarExport(loan, updatedAt),
+      ));
+    }
+    await this.store.upsertRecords(records);
   }
 }

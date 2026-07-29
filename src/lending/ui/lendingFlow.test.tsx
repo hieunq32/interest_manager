@@ -106,4 +106,20 @@ describe("LoanForm", () => {
       note: "Six-month term",
     }));
   });
+
+  it("rejects a blank reminder override offset instead of parsing it as zero", async () => {
+    const user = userEvent.setup();
+    render(<LoanForm borrowerId="borrower-1" onSave={vi.fn().mockResolvedValue(undefined)} />);
+
+    await user.type(screen.getByLabelText("Principal (VND)"), "10000000");
+    await user.type(screen.getByLabelText("Disbursement date"), "2026-06-20");
+    await user.type(screen.getByLabelText("Maturity date"), "2026-12-15");
+    await user.type(screen.getByLabelText("Rate (%)"), "2");
+    await user.click(screen.getByLabelText("Use reminder override"));
+    await user.clear(screen.getByLabelText("Reminder offset (days)"));
+    await user.click(screen.getByRole("button", { name: "Preview schedule" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Reminder offset must be a non-negative whole number");
+    expect(screen.queryByRole("heading", { name: "Schedule preview" })).not.toBeInTheDocument();
+  });
 });

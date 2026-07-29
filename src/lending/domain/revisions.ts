@@ -1,4 +1,5 @@
 import { generateSchedule } from "./scheduleGenerator";
+import { compareDateOnly } from "./dateRules";
 import type { DateOnly, ScheduleEntry, ScheduleVersion } from "./types";
 
 type RevisionChanges = Partial<
@@ -53,6 +54,12 @@ export function createScheduleRevision(input: RevisionInput): {
     adjustmentReason,
     createdAt: input.createdAt,
   };
+  if (compareDateOnly(version.effectiveDate, version.disbursementDate) < 0) {
+    throw new Error("effectiveDate must not be before disbursementDate");
+  }
+  if (compareDateOnly(version.effectiveDate, input.previous.effectiveDate) < 0) {
+    throw new Error("effectiveDate must not move backwards from the previous version");
+  }
   validateRevisionReason({ previous: input.previous, next: version, adjustmentReason });
 
   return { version, entries: generateSchedule(version), activeScheduleVersionId: version.id };

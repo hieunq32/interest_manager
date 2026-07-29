@@ -58,4 +58,24 @@ describe("schedule revisions", () => {
       [result.version.id, "2026-12-05", "2027-01-15"],
     ]);
   });
+
+  it("rejects a revision effective date before disbursement or before the previous version", () => {
+    expect(() =>
+      createScheduleRevision({
+        previous: version(),
+        effectiveDate: "2026-06-19",
+        changes: {},
+        createdAt: "2026-06-20T00:00:00.000Z",
+      }),
+    ).toThrow(/effectiveDate.*disbursementDate/i);
+
+    expect(() =>
+      createScheduleRevision({
+        previous: version({ effectiveDate: "2026-09-12" }),
+        effectiveDate: "2026-09-11",
+        changes: {},
+        createdAt: "2026-09-12T00:00:00.000Z",
+      }),
+    ).toThrow(/effectiveDate.*previous/i);
+  });
 });

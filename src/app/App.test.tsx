@@ -489,6 +489,148 @@ describe("App", () => {
     expect(saveScheduleEntries).not.toHaveBeenCalled();
     vi.restoreAllMocks();
   });
+
+  it("exports retained historical promises and excludes them after the linked entry is paid", async () => {
+    const user = userEvent.setup();
+    const onCalendarExport = vi.fn().mockResolvedValue(undefined);
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    const oldVersion: ScheduleVersion = {
+      ...history.version,
+      id: "calendar-version-1",
+      maturityDate: "2999-12-15",
+    };
+    const activeVersion: ScheduleVersion = {
+      ...oldVersion,
+      id: "calendar-version-2",
+      versionNumber: 2,
+      effectiveDate: "2999-08-01",
+      createdAt: history.loan.updatedAt,
+    };
+    const retainedEntry: ScheduleEntry = {
+      ...history.entry,
+      id: "calendar-retained-entry",
+      scheduleVersionId: oldVersion.id,
+      periodStart: "2999-06-30",
+      dueDate: "2999-07-31",
+      expectedPrincipal: 1_000_000,
+      expectedInterest: 20_000,
+    };
+    const activeEntry: ScheduleEntry = {
+      ...history.entry,
+      id: "calendar-active-entry",
+      scheduleVersionId: activeVersion.id,
+      periodStart: activeVersion.effectiveDate,
+      dueDate: "2999-09-05",
+    };
+    const originalLoan: Loan = {
+      ...history.loan,
+      defaultScheduleVersionId: oldVersion.id,
+      maturityDate: oldVersion.maturityDate,
+    };
+    const revisedLoan: Loan = {
+      ...originalLoan,
+      defaultScheduleVersionId: activeVersion.id,
+    };
+    const historicalPromise: PromiseToPay = {
+      ...history.promise,
+      id: "calendar-historical-promise",
+      loanId: revisedLoan.id,
+      scheduleEntryId: retainedEntry.id,
+      promisedDate: "2999-08-10",
+      note: "Historical entry promise",
+    };
+    await repository.saveBorrower(history.borrower);
+    await repository.saveLoanBundle({ loan: originalLoan, version: oldVersion, entries: [retainedEntry] });
+    await repository.saveLoanBundle({ loan: revisedLoan, version: activeVersion, entries: [activeEntry] });
+    await repository.savePromise(historicalPromise);
+    window.location.hash = `#/loans/${revisedLoan.id}`;
+
+    const first = render(<App dbName={dbName} onCalendarExport={onCalendarExport} />);
+    await screen.findByRole("heading", { name: "Loan details" });
+    await user.click(screen.getByRole("button", { name: "Export Calendar" }));
+    await waitFor(() => expect(onCalendarExport).toHaveBeenCalledTimes(1));
+    expect(onCalendarExport.mock.calls[0][0].content).toContain("Promise: calendar-historical-promise");
+    first.unmount();
+
+    await repository.savePayment({
+      ...history.payment,
+      id: "calendar-historical-payment",
+      loanId: revisedLoan.id,
+      scheduleEntryId: retainedEntry.id,
+      principalAmount: retainedEntry.expectedPrincipal,
+      interestAmount: retainedEntry.expectedInterest,
+    });
+    await expect(repository.listLoans(revisedLoan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+
+    render(<App dbName={dbName} onCalendarExport={onCalendarExport} />);
+    await screen.findByRole("heading", { name: "Loan details" });
+    await user.click(screen.getByRole("button", { name: "Export Calendar" }));
+    await waitFor(() => expect(onCalendarExport).toHaveBeenCalledTimes(2));
+    expect(onCalendarExport.mock.calls[1][0].content).not.toContain(retainedEntry.id);
+    expect(onCalendarExport.mock.calls[1][0].content).not.toContain(historicalPromise.id);
+  });
+
+  it("invalidates exported calendars when global reminder settings change", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    await repository.saveLoan({
+      ...history.loan,
+      calendarExportVersionId: history.loan.defaultScheduleVersionId,
+    });
+    window.location.hash = "#/settings";
+    render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Global reminders" });
+    await user.clear(screen.getByLabelText("Reminder offset (days)"));
+    await user.type(screen.getByLabelText("Reminder offset (days)"), "2");
+    await user.click(screen.getByRole("button", { name: "Save reminder settings" }));
+
+    await waitFor(async () => expect(await repository.listLoans()).toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]));
+  });
+
+  it("persists and clears a loan reminder override from loan detail", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    await repository.saveBorrower(history.borrower);
+    await repository.saveLoanBundle({
+      loan: {
+        ...history.loan,
+        calendarExportVersionId: history.loan.defaultScheduleVersionId,
+      },
+      version: history.version,
+      entries: [history.entry],
+    });
+    window.location.hash = `#/loans/${history.loan.id}`;
+    render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Loan details" });
+    await user.click(screen.getByLabelText("Use loan reminder override"));
+    await user.clear(screen.getByLabelText("Loan reminder offset (days)"));
+    await user.type(screen.getByLabelText("Loan reminder offset (days)"), "4");
+    await user.clear(screen.getByLabelText("Loan reminder time"));
+    await user.type(screen.getByLabelText("Loan reminder time"), "10:15");
+    await user.click(screen.getByRole("button", { name: "Save loan reminders" }));
+
+    await waitFor(async () => expect(await repository.listLoans()).toEqual([
+      expect.objectContaining({
+        reminderOverride: { enabled: true, offsetDays: 4, time: "10:15" },
+      }),
+    ]));
+    expect((await repository.listLoans())[0]).not.toHaveProperty("calendarExportVersionId");
+
+    await user.click(screen.getByRole("button", { name: "Clear loan override" }));
+    await waitFor(async () => expect((await repository.listLoans())[0]).not.toHaveProperty("reminderOverride"));
+  });
 });
 
 function lendingHistory(): {

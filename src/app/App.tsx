@@ -8,7 +8,7 @@ import {
 } from "../lending/domain/ledger";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
-import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
+import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import { buildIcsCalendar, buildScheduleCalendarEvents } from "../lending/reminders/ical";
 import { DEFAULT_REMINDER_SETTINGS, resolveReminderSettings } from "../lending/reminders/reminderSettings";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
@@ -268,6 +268,21 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setMessage("Reminder settings saved");
   };
 
+  const saveLoanReminderOverride = async (loanToUpdate: Loan, value?: ReminderOverride) => {
+    const {
+      calendarExportVersionId: _calendarExportVersionId,
+      reminderOverride: _reminderOverride,
+      ...current
+    } = loanToUpdate;
+    await repository.saveLoan({
+      ...current,
+      ...(value ? { reminderOverride: value } : {}),
+      updatedAt: new Date().toISOString(),
+    });
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage(value ? "Loan reminder override saved" : "Loan reminder override cleared");
+  };
+
   const saveRevision = async (loanToRevise: Loan, input: RevisionInput) => {
     const revision = createScheduleRevision(input);
     await repository.saveLoanBundle({
@@ -297,13 +312,17 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     loan: Loan;
     borrowerName: string;
     entries: ScheduleEntry[];
+    versions: ScheduleVersion[];
     payments: PaymentTransaction[];
     promises: PromiseToPay[];
   }) => {
     try {
       const today = todayInVietnam();
-      const entries = input.entries
-        .filter((entry) => entry.scheduleVersionId === input.loan.defaultScheduleVersionId)
+      const entries = selectCurrentLoanEntries({
+        entries: input.entries,
+        versions: input.versions,
+        activeScheduleVersionId: input.loan.defaultScheduleVersionId,
+      })
         .map((entry) => ({
           ...entry,
           status: calculateEntryStatus({ entry, payments: input.payments, promises: input.promises, today }),
@@ -455,10 +474,12 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         onSavePromise={savePromise}
         onUpdatePromise={updatePromise}
         onSaveRevision={(input) => saveRevision(loan, input)}
+        onSaveReminderOverride={(value) => saveLoanReminderOverride(loan, value)}
         onExportCalendar={() => void prepareCalendarExport({
           loan,
           borrowerName: loanBorrower?.displayName ?? "Unknown borrower",
           entries: scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId)),
+          versions: loanVersions,
           payments: payments.filter((payment) => payment.loanId === loan.id),
           promises: promises.filter((promise) => promise.loanId === loan.id),
         })}

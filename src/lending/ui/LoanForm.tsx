@@ -120,6 +120,9 @@ function parseReminderOverride(form: LoanFormState): ReminderOverride | undefine
   if (!form.useReminderOverride) {
     return undefined;
   }
+  if (!form.reminderOffsetDays.trim()) {
+    throw new Error("Reminder offset must be a non-negative whole number");
+  }
   const offsetDays = Number(form.reminderOffsetDays);
   if (!Number.isInteger(offsetDays) || offsetDays < 0) {
     throw new Error("Reminder offset must be a non-negative whole number");

@@ -11,6 +11,9 @@ function assertScheduleBounds(version: ScheduleVersion): void {
   if (compareDateOnly(version.maturityDate, version.disbursementDate) <= 0) {
     throw new Error("maturityDate must be after disbursementDate");
   }
+  if (compareDateOnly(version.effectiveDate, version.disbursementDate) < 0) {
+    throw new Error("effectiveDate must not be before disbursementDate");
+  }
   if (compareDateOnly(version.effectiveDate, version.maturityDate) >= 0) {
     throw new Error("effectiveDate must be before maturityDate");
   }

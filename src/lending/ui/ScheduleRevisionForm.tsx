@@ -1,7 +1,6 @@
 import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isDateOnly } from "../domain/dateRules";
-import { assertValidMoney } from "../domain/money";
 import { type RevisionInput, validateRevisionReason } from "../domain/revisions";
 import type { CalculationModel, PartialPeriodInterestMode, RateUnit, ScheduleVersion } from "../domain/types";
 import { Button } from "../../ui/Button";
@@ -20,7 +19,7 @@ type RevisionFormState = {
   disbursementDate: string;
   monthlyDueDay: string;
   maturityDate: string;
-  rateValue: string;
+  ratePercent: string;
   rateUnit: RateUnit;
   partialPeriodInterestMode: PartialPeriodInterestMode;
   adjustmentReason: string;
@@ -34,7 +33,7 @@ function formValues(current: ScheduleVersion): RevisionFormState {
     disbursementDate: current.disbursementDate,
     monthlyDueDay: String(current.monthlyDueDay),
     maturityDate: current.maturityDate,
-    rateValue: String(current.rateValue),
+    ratePercent: String(current.rateValue * 100),
     rateUnit: current.rateUnit,
     partialPeriodInterestMode: current.partialPeriodInterestMode,
     adjustmentReason: "",
@@ -53,12 +52,16 @@ function revisionInput(current: ScheduleVersion, form: RevisionFormState): Revis
   if (!isDateOnly(form.effectiveDate) || !isDateOnly(form.disbursementDate) || !isDateOnly(form.maturityDate)) {
     throw new Error("Effective, disbursement, and maturity dates are required");
   }
-  const principalBase = assertValidMoney(Number(form.principalBase), "Principal base");
+  const principalBase = Number(form.principalBase);
+  if (!form.principalBase.trim() || !Number.isSafeInteger(principalBase) || principalBase <= 0) {
+    throw new Error("Principal base must be a positive whole number");
+  }
   const monthlyDueDay = parseDueDay(form.monthlyDueDay);
-  const rateValue = Number(form.rateValue);
-  if (!Number.isFinite(rateValue) || rateValue < 0) {
+  const ratePercent = Number(form.ratePercent);
+  if (!form.ratePercent.trim() || !Number.isFinite(ratePercent) || ratePercent < 0) {
     throw new Error("Rate must be a non-negative number");
   }
+  const rateValue = ratePercent / 100;
 
   const changes = {
     ...(form.calculationModel !== current.calculationModel ? { calculationModel: form.calculationModel } : {}),
@@ -116,7 +119,7 @@ export function ScheduleRevisionForm({ current, onSave }: ScheduleRevisionFormPr
       <Field label="Disbursement date" type="date" value={form.disbursementDate} onChange={(event) => update("disbursementDate", event.target.value)} />
       <Field label="Monthly due day" inputMode="numeric" value={form.monthlyDueDay} onChange={(event) => update("monthlyDueDay", event.target.value)} />
       <Field label="Maturity date" type="date" value={form.maturityDate} onChange={(event) => update("maturityDate", event.target.value)} />
-      <Field label="Rate (decimal)" inputMode="decimal" value={form.rateValue} onChange={(event) => update("rateValue", event.target.value)} />
+      <Field label="Rate (%)" inputMode="decimal" value={form.ratePercent} onChange={(event) => update("ratePercent", event.target.value)} />
       <label className="field" htmlFor="revision-rate-unit"><span>Rate unit</span>
         <select id="revision-rate-unit" value={form.rateUnit} onChange={(event) => update("rateUnit", event.target.value as RateUnit)}>
           {Object.entries(rateUnitLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

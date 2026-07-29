@@ -241,4 +241,50 @@ describe("IndexedDbLendingRepository", () => {
 
     await expect(targetStore.listRecords()).resolves.toEqual([...domainRecords, existingSharedRecord]);
   });
+
+  it("invalidates an exported loan calendar when a payment is saved", async () => {
+    const repository = createRepository();
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+
+    await repository.savePayment(payment);
+
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+  });
+
+  it("invalidates an exported loan calendar for promise creation and status updates", async () => {
+    const repository = createRepository();
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+
+    await repository.savePromise(promise);
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+    await repository.savePromise({ ...promise, status: "fulfilled", updatedAt: "2026-07-29T00:00:00.000Z" });
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+    await repository.savePromise({ ...promise, status: "cancelled", updatedAt: "2026-07-30T00:00:00.000Z" });
+    await expect(repository.listLoans(loan.borrowerId)).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+  });
+
+  it("invalidates every exported loan calendar when global reminder settings change", async () => {
+    const repository = createRepository();
+    await repository.saveLoan({ ...loan, calendarExportVersionId: version.id });
+    await repository.saveLoan({ ...secondLoan, calendarExportVersionId: secondVersion.id });
+
+    await repository.saveReminderSettings({ ...reminderSettings, offsetDays: 2 });
+
+    await expect(repository.listLoans()).resolves.toEqual([
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+      expect.not.objectContaining({ calendarExportVersionId: expect.any(String) }),
+    ]);
+  });
 });

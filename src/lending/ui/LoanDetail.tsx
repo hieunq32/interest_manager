@@ -7,11 +7,12 @@ import {
   selectCurrentLoanEntries,
 } from "../domain/ledger";
 import type { RevisionInput } from "../domain/revisions";
-import type { Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../domain/types";
+import type { Loan, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { PaymentForm } from "./PaymentForm";
 import { PromiseForm } from "./PromiseForm";
 import { ScheduleRevisionForm } from "./ScheduleRevisionForm";
+import { LoanReminderOverrideForm } from "./LoanReminderOverrideForm";
 import { formatMoneyVnd } from "./lendingLabels";
 
 export interface LoanDetailProps {
@@ -28,6 +29,7 @@ export interface LoanDetailProps {
   onSavePromise(value: PromiseToPay): Promise<void>;
   onUpdatePromise(value: PromiseToPay): Promise<void>;
   onSaveRevision(input: RevisionInput): Promise<void>;
+  onSaveReminderOverride(value?: ReminderOverride): Promise<void>;
   onExportCalendar(versionId: string): void;
 }
 
@@ -51,6 +53,7 @@ export function LoanDetail({
   onSavePromise,
   onUpdatePromise,
   onSaveRevision,
+  onSaveReminderOverride,
   onExportCalendar,
 }: LoanDetailProps) {
   const [entryForm, setEntryForm] = useState<EntryForm>();
@@ -61,6 +64,11 @@ export function LoanDetail({
     versions,
     activeScheduleVersionId: loan.defaultScheduleVersionId,
   });
+  const currentEntryIds = new Set(currentEntries.map((entry) => entry.id));
+  const activeTerms = activeVersion ?? {
+    disbursementDate: loan.disbursementDate,
+    maturityDate: loan.maturityDate,
+  };
   const summary = calculateLoanSummary({ loanId: loan.id, entries: currentEntries, payments, promises, today });
   const calendarState = calendarExportVersionId === loan.defaultScheduleVersionId
     ? "Calendar export matches the active schedule."
@@ -96,7 +104,7 @@ export function LoanDetail({
       </div>
       <h2 id="loan-detail-heading">Loan details</h2>
       <p>{borrowerName}</p>
-      <p>{loan.disbursementDate} to {loan.maturityDate}</p>
+      <p>{activeTerms.disbursementDate} to {activeTerms.maturityDate}</p>
 
       <section className="schedule-preview" aria-labelledby="loan-summary-heading">
         <h3 id="loan-summary-heading">Current balance</h3>
@@ -111,6 +119,11 @@ export function LoanDetail({
       <section className="schedule-preview" aria-labelledby="calendar-export-heading">
         <h3 id="calendar-export-heading">Calendar export</h3>
         <p>{calendarState}</p>
+      </section>
+
+      <section className="schedule-preview" aria-labelledby="loan-reminders-heading">
+        <h3 id="loan-reminders-heading">Loan reminders</h3>
+        <LoanReminderOverrideForm value={loan.reminderOverride} onSave={onSaveReminderOverride} />
       </section>
 
       {showRevisionForm && activeVersion ? <section className="schedule-preview" aria-labelledby="revision-heading">
@@ -133,12 +146,13 @@ export function LoanDetail({
                 <tbody>{versionEntries.map((entry) => {
                   const totals = calculateEntryTotals(entry, payments);
                   const status = calculateEntryStatus({ entry, payments, promises, today });
+                  const isCurrent = currentEntryIds.has(entry.id);
                   return <tr key={entry.id}>
                     <td>Original due: {entry.dueDate}</td>
                     <td>{entryStatusLabel(status)}</td>
                     <td>{formatMoneyVnd(entry.expectedPrincipal)} / {formatMoneyVnd(totals.receivedPrincipal)} / {formatMoneyVnd(totals.outstandingPrincipal)}</td>
                     <td>{formatMoneyVnd(entry.expectedInterest)} / {formatMoneyVnd(totals.receivedInterest)} / {formatMoneyVnd(totals.outstandingInterest)}</td>
-                    <td>{isActive ? <div className="button-row">
+                    <td>{isCurrent ? <div className="button-row">
                       <Button icon={<CircleDollarSign aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "payment", entryId: entry.id })}>Record payment</Button>
                       <Button icon={<CalendarDays aria-hidden="true" size={16} />} onClick={() => setEntryForm({ kind: "promise", entryId: entry.id })}>Record promise</Button>
                     </div> : "Read-only"}</td>
