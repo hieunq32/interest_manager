@@ -1,4 +1,16 @@
 import { describe, expect, it } from "vitest";
+import type {
+  Borrower,
+  Loan,
+  PaymentTransaction,
+  PromiseToPay,
+  ReminderSettings,
+  ScheduleEntry,
+  ScheduleVersion,
+} from "../lending/domain/types";
+import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
+import { LENDING_RECORD_TYPES } from "../lending/storage/recordTypes";
+import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
 import type { GenericRecord } from "./types";
 import { createEncryptedBackup, restoreEncryptedBackup } from "./backupService";
 
@@ -54,4 +66,112 @@ describe("backup service", () => {
       code: "invalid-backup",
     });
   });
+
+  it("restores every lending domain record into a clean repository", async () => {
+    const source = createLendingRepository();
+    const domainRecords = await saveLendingHistory(source);
+    const backup = await createEncryptedBackup(domainRecords, "safe passphrase", { iterations: 1000 });
+    const restored = await restoreEncryptedBackup(backup, "safe passphrase");
+    const target = createLendingRepository();
+
+    await target.replaceAllDomainRecords(restored.records);
+
+    await expect(target.listAllDomainRecords()).resolves.toEqual(domainRecords);
+    expect(domainRecords.map((record) => record.type).sort()).toEqual(Object.values(LENDING_RECORD_TYPES).sort());
+  });
 });
+
+let lendingDbCounter = 0;
+
+function createLendingRepository(): IndexedDbLendingRepository {
+  lendingDbCounter += 1;
+  return new IndexedDbLendingRepository(new IndexedDbRecordStore(`backup-lending-test-${lendingDbCounter}`));
+}
+
+async function saveLendingHistory(repository: IndexedDbLendingRepository): Promise<GenericRecord[]> {
+  const createdAt = "2026-07-28T00:00:00.000Z";
+  const updatedAt = "2026-07-28T01:00:00.000Z";
+  const borrower: Borrower = {
+    id: "borrower-1",
+    displayName: "Nguyen Van A",
+    status: "active",
+    createdAt,
+    updatedAt,
+  };
+  const loan: Loan = {
+    id: "loan-1",
+    borrowerId: borrower.id,
+    calculationModel: "equal-principal-flat-interest",
+    originalPrincipal: 10_000_000,
+    disbursementDate: "2026-06-20",
+    monthlyDueDay: 5,
+    maturityDate: "2026-12-15",
+    rateValue: 0.02,
+    rateUnit: "monthly",
+    partialPeriodInterestMode: "full-period",
+    defaultScheduleVersionId: "version-1",
+    status: "active",
+    createdAt,
+    updatedAt,
+  };
+  const version: ScheduleVersion = {
+    id: "version-1",
+    loanId: loan.id,
+    versionNumber: 1,
+    effectiveDate: "2026-06-20",
+    calculationModel: loan.calculationModel,
+    principalBase: loan.originalPrincipal,
+    disbursementDate: loan.disbursementDate,
+    monthlyDueDay: loan.monthlyDueDay,
+    maturityDate: loan.maturityDate,
+    rateValue: loan.rateValue,
+    rateUnit: loan.rateUnit,
+    partialPeriodInterestMode: loan.partialPeriodInterestMode,
+    createdAt,
+  };
+  const entry: ScheduleEntry = {
+    id: "entry-1",
+    scheduleVersionId: version.id,
+    periodStart: "2026-06-20",
+    dueDate: "2026-07-05",
+    expectedPrincipal: 1_666_666,
+    expectedInterest: 200_000,
+    status: "upcoming",
+    createdAt,
+    updatedAt,
+  };
+  const payment: PaymentTransaction = {
+    id: "payment-1",
+    loanId: loan.id,
+    scheduleEntryId: entry.id,
+    receivedAt: "2026-07-05",
+    principalAmount: 1_000_000,
+    interestAmount: 200_000,
+    createdAt,
+  };
+  const promise: PromiseToPay = {
+    id: "promise-1",
+    loanId: loan.id,
+    scheduleEntryId: entry.id,
+    promisedDate: "2026-07-10",
+    note: "Pay after salary day",
+    status: "open",
+    createdAt,
+    updatedAt,
+  };
+  const settings: ReminderSettings = {
+    enabled: true,
+    offsetDays: 1,
+    time: "08:00",
+  };
+
+  await repository.saveBorrower(borrower);
+  await repository.saveLoan(loan);
+  await repository.saveScheduleVersion(version);
+  await repository.saveScheduleEntries([entry]);
+  await repository.savePayment(payment);
+  await repository.savePromise(promise);
+  await repository.saveReminderSettings(settings);
+
+  return repository.listAllDomainRecords();
+}

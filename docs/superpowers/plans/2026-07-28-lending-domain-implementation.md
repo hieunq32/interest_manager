@@ -17,6 +17,7 @@ Every task in this plan inherits these decisions from the approved design spec:
 - Reminders use the in-app dashboard and exported `.ics` events for Apple Calendar. No Web Push backend is introduced.
 - The global reminder default is enabled, one day before due, at 08:00. Each loan can override enabled state, offset days, and reminder time.
 - Overdue state is displayed in the app without repeated daily notifications. A promise-to-pay can also be exported as a calendar event.
+- A fully paid schedule entry has no remaining reminder obligation; exclude both its due event and any linked promise event from Calendar export.
 - Each loan selects either interest-only with principal at final settlement or equal principal with flat interest on original principal.
 - The first monthly due date is the configured due day strictly after disbursement. Invalid monthly due days resolve to the last day of that month.
 - A maturity date is explicit and may differ from the monthly due day. It is the final schedule date. For equal-principal loans it replaces the regular due date in its month rather than creating a nearby extra installment.
@@ -302,6 +303,7 @@ Use deterministic entry IDs derived from the schedule version and due date, for 
 - [ ] Write failing day-31 tests for February, April, and leap February.
 - [ ] Implement date generation using the approved maturity-month rules: equal-principal schedules include regular dates only in months before the maturity month, then maturity once; interest-only schedules include regular interest dates before maturity and add maturity once, including a maturity-month due date only when it is earlier than maturity.
 - [ ] Use `effectiveDate` as the schedule-generation boundary for a version; the first version sets it to the disbursement date, and a revision generates only future entries strictly after its effective boundary. Use the boundary as the first period start and the previous due date thereafter.
+- [ ] The next period-start rule is for the initial version only; a revised version must use its `effectiveDate` boundary as specified above.
 - [ ] Implement period starts as disbursement date for the first entry and the previous due date thereafter. Calculate each entry’s expected interest through `calculatePeriodInterest`.
 - [ ] Initialize generated entries as `upcoming`; do not derive payment status inside the generator.
 - [ ] Run schedule tests, interest tests, full tests, and typecheck.
@@ -344,11 +346,18 @@ calculateEntryStatus(input: {
   today: DateOnly;
 }): EntryStatus
 calculateLoanSummary(input: {
+  loanId: string;
   entries: ScheduleEntry[];
   payments: PaymentTransaction[];
   promises: PromiseToPay[];
   today: DateOnly;
 }): LoanSummary
+
+selectCurrentLoanEntries(input: {
+  entries: ScheduleEntry[];
+  versions: ScheduleVersion[];
+  activeScheduleVersionId: string;
+}): ScheduleEntry[]
 
 export interface RevisionInput {
   previous: ScheduleVersion;
@@ -378,6 +387,7 @@ validateRevisionReason(input: {
 createScheduleRevision(input: RevisionInput): {
   version: ScheduleVersion;
   entries: ScheduleEntry[];
+  activeScheduleVersionId: string;
 }
 ```
 
@@ -413,6 +423,11 @@ export interface LendingRepository {
   saveScheduleVersion(value: ScheduleVersion): Promise<void>;
   listScheduleEntries(scheduleVersionId?: string): Promise<ScheduleEntry[]>;
   saveScheduleEntries(values: ScheduleEntry[]): Promise<void>;
+  saveLoanBundle(input: {
+    loan: Loan;
+    version: ScheduleVersion;
+    entries: ScheduleEntry[];
+  }): Promise<void>;
   listPayments(loanId?: string): Promise<PaymentTransaction[]>;
   savePayment(value: PaymentTransaction): Promise<void>;
   listPromises(loanId?: string): Promise<PromiseToPay[]>;
@@ -461,6 +476,7 @@ export interface CalendarEventInput {
   summary: string;
   description: string;
   reminderOffsetDays: number;
+  dtstampUtc: string;
 }
 
 buildIcsCalendar(events: CalendarEventInput[]): string
@@ -470,6 +486,7 @@ buildScheduleCalendarEvents(input: {
   borrowerName: string;
   loanLabel: string;
   settings: ReminderSettings;
+  today: DateOnly;
 }): CalendarEventInput[]
 ```
 
@@ -479,9 +496,10 @@ buildScheduleCalendarEvents(input: {
 - [ ] Write a failing ICS test proving `VCALENDAR`/`VEVENT` output contains stable UID, local reminder time converted from Asia/Ho_Chi_Minh to UTC, `TRIGGER:-P1D`, and CRLF line endings.
 - [ ] Write a failing escaping test for commas, semicolons, backslashes, and newlines in borrower names, notes, and descriptions.
 - [ ] Write a failing event-selection test that excludes fully paid schedule entries and closed promises, includes due entries and open promise dates, and marks events with a stable description.
+- [ ] Write a failing purity test proving event selection uses the supplied Vietnam `today` date, excludes an open promise linked to a paid entry, and serializes a deterministic `DTSTAMP` for every event.
 - [ ] Implement deterministic `.ics` serialization. Use a fixed `PRODID`, CRLF separators, UTC `DTSTART`, and escaped text fields. Vietnam has no DST, so convert configured local time by subtracting seven hours.
 - [ ] Implement download helpers at the UI boundary only. The domain/reminder module returns text and does not access `document`.
-- [ ] Add a stale-calendar state when a schedule revision changes after a prior export; require re-export rather than silently claiming the existing file is current.
+- [ ] Return stable schedule-version/event identity metadata from this domain module. The stale-calendar state and re-export warning are rendered and persisted by the Task 8/9 UI workflow after a schedule revision; do not add browser state here.
 - [ ] Run focused tests, full tests, and typecheck.
 - [ ] Commit as `feat: export lending reminders to Calendar`.
 
@@ -489,7 +507,7 @@ buildScheduleCalendarEvents(input: {
 
 ### Task 7: Add Offline Routing, Borrower Management, and Loan Onboarding
 
-**Files:** Create `src/app/routes.ts`, `src/app/routes.test.ts`, `src/lending/ui/lendingLabels.ts`, `src/lending/ui/BorrowerList.tsx`, `src/lending/ui/BorrowerForm.tsx`, `src/lending/ui/BorrowerDetail.tsx`, `src/lending/ui/LoanForm.tsx`. Modify `src/app/App.tsx` and `src/app/App.test.tsx`.
+**Files:** Create `src/app/routes.ts`, `src/app/routes.test.ts`, `src/lending/ui/lendingLabels.ts`, `src/lending/ui/BorrowerList.tsx`, `src/lending/ui/BorrowerForm.tsx`, `src/lending/ui/BorrowerDetail.tsx`, `src/lending/ui/LoanForm.tsx`. Modify `src/app/App.tsx`, `src/app/App.test.tsx`, `src/lending/storage/lendingRepository.ts`, and `src/lending/storage/lendingRepository.test.ts`.
 
 **Interfaces and screen behavior:**
 
@@ -537,6 +555,7 @@ LoanFormProps: { borrowerId: string; onSave(input: LoanDraft): Promise<void> }
 - [ ] Implement hash routing so browser reload and offline navigation work without a server-side router.
 - [ ] Implement borrower list/create/detail flows with the existing UI primitives and Lucide icons. Use archive actions rather than destructive deletion.
 - [ ] Implement loan creation as a draft/preview/confirm flow: normalize percentage input, validate dates and amount, create the first schedule version, generate entries, then save loan/version/entries together through the repository.
+- [ ] Implement `saveLoanBundle` with one IndexedDB read-write transaction and use it after confirmation so a loan cannot be persisted without its initial schedule version and entries.
 - [ ] Add navigation links from borrower detail to its loans and from loan creation back to borrower detail.
 - [ ] Make the dashboard the first usable screen after the base storage smoke UI is replaced.
 - [ ] Run UI tests, full tests, typecheck, and production build.
@@ -577,8 +596,10 @@ ScheduleRevisionFormProps: {
 - [ ] Implement loan detail sections for current balance, next due date, due/overdue counts, schedule-version history, payment history, promise history, and schedule rows.
 - [ ] Add per-entry actions for record payment, record promise, mark promise fulfilled/cancelled, and open a revision flow. Keep the original due date visible when a promise is late.
 - [ ] Show principal and interest expected/received/outstanding separately. Do not merge them into one opaque total.
+- [ ] Derive current balances from all active-version entries plus old-version entries whose `dueDate` is on or before the active version's `effectiveDate`; exclude superseded future entries while keeping them visible in read-only history.
 - [ ] Show old schedule versions read-only and label the active version. Existing payments remain attached to their original entry/version.
-- [ ] Add the Calendar export action and show stale-export state after a revision.
+- [ ] Build the pure `.ics` content before marking an export current, pass the prepared content and version metadata to the Task 9 download boundary, and show stale-export state after a revision.
+- [ ] Persist a revision's loan pointer, new version, and new entries with the existing repository bundle transaction so a partial revision cannot become active.
 - [ ] Refresh derived statuses and summaries after each mutation without requiring a full page reload.
 - [ ] Run focused UI tests, full tests, typecheck, and production build.
 - [ ] Commit as `feat: add lending payment and revision workflows`.
@@ -629,11 +650,12 @@ ReminderSettingsProps: {
 - [ ] Create borrower `Nguyen Van A`.
 - [ ] Create a 10,000,000 VND model-2 loan, disbursed `2026-06-20`, due day 5, maturity `2026-12-15`, rate 2% per month.
 - [ ] Confirm the preview and saved schedule dates are `2026-07-05`, `2026-08-05`, `2026-09-05`, `2026-10-05`, `2026-11-05`, and `2026-12-15`.
-- [ ] Confirm total expected principal is exactly 10,000,000 VND and total expected interest is six full monthly periods under the selected final-period mode.
+- [ ] Confirm total expected principal is exactly 10,000,000 VND and total expected interest contains six collection periods; full-period mode yields six full monthly charges, while calendar-day-prorated mode prorates the final `2026-11-05` to `2026-12-15` period.
 - [ ] Record a payment of 800,000 VND principal and 200,000 VND interest, then verify the two outstanding balances update independently.
 - [ ] Add a promise for `2026-09-17` with note `Mai tra`, then verify it appears in promises and does not reduce outstanding balances.
 - [ ] Move the app date/test fixture past the promise date and verify the entry displays overdue without generating repeated notifications.
 - [ ] Attempt a rate revision without a reason and verify it is blocked; add a reason, save the revision, and verify the old version and its history remain visible.
+- [ ] After revision, verify current balances include unpaid/partially-paid old entries due on or before the effective date, exclude superseded old future entries, and include all active-version entries.
 - [ ] Export `.ics`, inspect that due and promise events exist, and verify paid entries are excluded.
 - [ ] Export an encrypted backup, clear through the app’s explicit reset flow, restore the backup, and confirm borrower, loan, versions, entries, payment, promise, and settings all return.
 - [ ] Use browser offline mode and repeat dashboard navigation, loan detail, payment entry, and backup restore read access.
