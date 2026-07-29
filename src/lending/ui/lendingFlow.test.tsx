@@ -19,13 +19,13 @@ describe("BorrowerForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { rerender } = render(<BorrowerForm onSave={onSave} />);
 
-    await user.click(screen.getByRole("button", { name: "Save borrower" }));
-    expect(screen.getByText("Display name is required")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Lưu người vay" }));
+    expect(screen.getByText("Tên hiển thị là bắt buộc")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Display name"), " Tran Thi B ");
-    await user.type(screen.getByLabelText("Phone"), "0909000000");
-    await user.type(screen.getByLabelText("Note"), "Prefers afternoon calls");
-    await user.click(screen.getByRole("button", { name: "Save borrower" }));
+    await user.type(screen.getByLabelText("Tên hiển thị"), " Tran Thi B ");
+    await user.type(screen.getByLabelText("Số điện thoại"), "0909000000");
+    await user.type(screen.getByLabelText("Ghi chú"), "Prefers afternoon calls");
+    await user.click(screen.getByRole("button", { name: "Lưu người vay" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({
@@ -36,7 +36,7 @@ describe("BorrowerForm", () => {
     });
 
     rerender(<BorrowerForm value={borrower} onSave={onSave} />);
-    await user.click(screen.getByRole("button", { name: "Archive borrower" }));
+    await user.click(screen.getByRole("button", { name: "Lưu trữ người vay" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
     expect(onSave.mock.calls[1][0]).toMatchObject({

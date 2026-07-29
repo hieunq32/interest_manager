@@ -25,6 +25,7 @@ import type { StorageHealth } from "../storage/types";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { StatusBadge } from "../ui/StatusBadge";
+import { vi } from "../i18n/vi";
 import { parseHashRoute, serializeHashRoute, type Route } from "./routes";
 
 type AppProps = {
@@ -443,10 +444,10 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     }
     if (route.name === "borrower") {
       if (!borrower) {
-        return <section className="route-panel"><h2>Borrower not found</h2><Button onClick={() => navigate({ name: "dashboard" })}>Borrowers</Button></section>;
+        return <section className="route-panel"><h2>{vi.borrower.notFound}</h2><Button onClick={() => navigate({ name: "dashboard" })}>{vi.borrower.title}</Button></section>;
       }
       if (mode === "edit-borrower") {
-        return <section className="route-panel"><h2>Edit borrower</h2><BorrowerForm value={borrower} onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
+        return <section className="route-panel"><h2>{vi.borrower.edit}</h2><BorrowerForm value={borrower} onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
       }
       if (mode === "create-loan") {
         return <LoanForm borrowerId={borrower.id} onSave={saveLoan} onCancel={() => setMode("none")} />;
@@ -455,7 +456,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     }
     if (route.name === "loan") {
       if (!loan) {
-        return <section className="route-panel"><h2>Loan not found</h2><Button onClick={() => navigate({ name: "dashboard" })}>Borrowers</Button></section>;
+        return <section className="route-panel"><h2>{vi.loan.notFound}</h2><Button onClick={() => navigate({ name: "dashboard" })}>{vi.borrower.title}</Button></section>;
       }
       const loanBorrower = borrowers.find((candidate) => candidate.id === loan.borrowerId);
       const loanVersions = scheduleVersions.filter((version) => version.loanId === loan.id);
@@ -486,26 +487,26 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       />;
     }
     if (mode === "create-borrower") {
-      return <section className="route-panel"><h2>New borrower</h2><BorrowerForm onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
+      return <section className="route-panel"><h2>{vi.borrower.new}</h2><BorrowerForm onSave={saveBorrower} onCancel={() => setMode("none")} /></section>;
     }
     return <>
       <Dashboard summaries={dashboardSummaries} onOpenLoan={(loanId) => navigate({ name: "loan", loanId })} />
-      <section className="route-panel" aria-labelledby="borrowers-heading"><div className="route-heading"><h2 id="borrowers-heading">Borrowers</h2><Button icon={<Plus aria-hidden="true" size={18} />} variant="primary" onClick={() => setMode("create-borrower")}>New borrower</Button></div><BorrowerList borrowers={borrowers} onSelect={(borrowerId) => navigate({ name: "borrower", borrowerId })} /></section>
+      <section className="route-panel" aria-labelledby="borrowers-heading"><div className="route-heading"><h2 id="borrowers-heading">{vi.borrower.title}</h2><Button icon={<Plus aria-hidden="true" size={18} />} variant="primary" onClick={() => setMode("create-borrower")}>{vi.borrower.new}</Button></div><BorrowerList borrowers={borrowers} onSelect={(borrowerId) => navigate({ name: "borrower", borrowerId })} /></section>
     </>;
   })();
 
   return (
     <main className="app-shell">
       <section className="hero-band">
-        <h1>Interest Manager</h1>
+        <h1>{vi.appName}</h1>
         <nav className="app-nav" aria-label="Primary navigation">
-          <a href={serializeHashRoute({ name: "dashboard" })}>Home</a>
-          <a href={serializeHashRoute({ name: "settings" })}>Settings</a>
+          <a href={serializeHashRoute({ name: "dashboard" })}>{vi.navigation.home}</a>
+          <a href={serializeHashRoute({ name: "settings" })}>{vi.navigation.settings}</a>
         </nav>
       </section>
 
       <section className="status-strip" aria-label="System status">
-        <StatusBadge tone={isOnline ? "ok" : "warn"}>{isOnline ? "Online" : "Offline"}</StatusBadge>
+        <StatusBadge tone={isOnline ? "ok" : "warn"}>{isOnline ? "Đang online" : "Đang offline"}</StatusBadge>
         <StatusBadge tone={health.available ? "ok" : "error"}>{health.message}</StatusBadge>
         <span className="record-count">{recordLabel(health.recordCount)}</span>
         <span className="status-message">{message}</span>

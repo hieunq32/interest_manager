@@ -1,4 +1,5 @@
 import type { LoanSummary } from "../domain/ledger";
+import { vi } from "../../i18n/vi";
 import { formatMoneyVnd } from "./lendingLabels";
 
 export interface DashboardProps {
@@ -12,11 +13,18 @@ type DashboardSection = {
   count(summary: LoanSummary): number;
 };
 
+const dashboardLabels = {
+  title: "Tổng quan",
+  dueToday: `${vi.status.due} hôm nay`,
+  openLoan: "Mở khoản vay",
+  emptySection: "Không có khoản vay trong mục này.",
+};
+
 const sections: DashboardSection[] = [
-  { title: "Due today", tone: "due", count: (summary) => summary.dueToday },
-  { title: "Upcoming", tone: "upcoming", count: (summary) => summary.dueSoon },
-  { title: "Promises", tone: "promised", count: (summary) => summary.promised },
-  { title: "Overdue", tone: "overdue", count: (summary) => summary.overdue },
+  { title: dashboardLabels.dueToday, tone: "due", count: (summary) => summary.dueToday },
+  { title: vi.status.upcoming, tone: "upcoming", count: (summary) => summary.dueSoon },
+  { title: vi.status.promised, tone: "promised", count: (summary) => summary.promised },
+  { title: vi.status.overdue, tone: "overdue", count: (summary) => summary.overdue },
 ];
 
 export function Dashboard({ summaries, onOpenLoan }: DashboardProps) {
@@ -26,12 +34,12 @@ export function Dashboard({ summaries, onOpenLoan }: DashboardProps) {
   return (
     <section className="dashboard" aria-labelledby="dashboard-heading">
       <div className="route-heading">
-        <h2 id="dashboard-heading">Dashboard</h2>
-        <span className="detail-status">{summaries.length} active loans</span>
+        <h2 id="dashboard-heading">{dashboardLabels.title}</h2>
+        <span className="detail-status">{summaries.length} {vi.loan.title.toLowerCase()} {vi.status.active.toLowerCase()}</span>
       </div>
-      <section className="dashboard-totals" aria-label="Active-loan totals">
-        <p>Outstanding principal: {formatMoneyVnd(outstandingPrincipal)}</p>
-        <p>Outstanding interest: {formatMoneyVnd(outstandingInterest)}</p>
+      <section className="dashboard-totals" aria-label={`${vi.status.active} ${vi.loan.title}`}>
+        <p>{vi.loan.outstandingPrincipal}: {formatMoneyVnd(outstandingPrincipal)}</p>
+        <p>{vi.loan.outstandingInterest}: {formatMoneyVnd(outstandingInterest)}</p>
       </section>
       <div className="dashboard-sections">
         {sections.map((section) => {
@@ -39,11 +47,11 @@ export function Dashboard({ summaries, onOpenLoan }: DashboardProps) {
           return <section className="dashboard-section" key={section.title} aria-labelledby={`${section.tone}-heading`}>
             <h3 id={`${section.tone}-heading`}>{section.title}</h3>
             {matchingSummaries.length === 0
-              ? <p className="empty-state">No loans in this section.</p>
+              ? <p className="empty-state">{dashboardLabels.emptySection}</p>
               : <ul className="dashboard-list">
                 {matchingSummaries.map((summary) => <li key={summary.loanId}>
                   <button className="dashboard-row" type="button" onClick={() => onOpenLoan(summary.loanId)}>
-                    <span>Open loan {summary.loanId}</span>
+                    <span>{dashboardLabels.openLoan} {summary.loanId}</span>
                     <span className={`dashboard-count dashboard-count-${section.tone}`}>{section.count(summary)} {section.title.toLowerCase()}</span>
                   </button>
                 </li>)}

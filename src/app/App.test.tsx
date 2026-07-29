@@ -19,11 +19,13 @@ describe("App", () => {
   it("uses the actionable dashboard as the first route", async () => {
     render(<App dbName={nextDbName()} />);
 
-    expect(screen.getByRole("heading", { name: "Interest Manager" })).toBeInTheDocument();
-    expect(screen.getByText("Online")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Quản lý tiền lãi" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Trang chủ" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cài đặt" })).toBeInTheDocument();
+    expect(screen.getByText("Đang online")).toBeInTheDocument();
     expect(await screen.findByText("Storage ready")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByText("0 active loans")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tổng quan" })).toBeInTheDocument();
+    expect(screen.getByText("0 khoản vay đang hoạt động")).toBeInTheDocument();
   });
 
   it("updates the connection status when the browser goes offline and online", async () => {
@@ -32,21 +34,21 @@ describe("App", () => {
     act(() => {
       window.dispatchEvent(new Event("offline"));
     });
-    expect(await screen.findByText("Offline")).toBeInTheDocument();
+    expect(await screen.findByText("Đang offline")).toBeInTheDocument();
 
     act(() => {
       window.dispatchEvent(new Event("online"));
     });
-    expect(await screen.findByText("Online")).toBeInTheDocument();
+    expect(await screen.findByText("Đang online")).toBeInTheDocument();
   });
 
   it("creates a borrower and navigates to its persisted detail route", async () => {
     const user = userEvent.setup();
     render(<App dbName={nextDbName()} />);
 
-    await user.click(screen.getByRole("button", { name: "New borrower" }));
-    await user.type(screen.getByLabelText("Display name"), "Tran Thi B");
-    await user.click(screen.getByRole("button", { name: "Save borrower" }));
+    await user.click(screen.getByRole("button", { name: "Thêm người vay" }));
+    await user.type(screen.getByLabelText("Tên hiển thị"), "Tran Thi B");
+    await user.click(screen.getByRole("button", { name: "Lưu người vay" }));
 
     expect(await screen.findByRole("heading", { name: "Tran Thi B" })).toBeInTheDocument();
     expect(window.location.hash).toMatch(/^#\/borrowers\//);
@@ -59,7 +61,7 @@ describe("App", () => {
 
     render(<App dbName={nextDbName()} />);
 
-    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt" }));
 
     const createElement = vi.spyOn(document, "createElement");
     createElement.mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
@@ -106,7 +108,7 @@ describe("App", () => {
 
     render(<App dbName={nextDbName()} />);
 
-    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt" }));
 
     await user.type(screen.getByLabelText("Restore passphrase"), "safe passphrase");
     await user.upload(screen.getByLabelText("Backup file"), file);
@@ -135,7 +137,7 @@ describe("App", () => {
 
     render(<App dbName={dbName} />);
 
-    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt" }));
     await user.click(screen.getByRole("button", { name: "Reset lending data" }));
 
     expect(confirm).toHaveBeenCalledWith("Clear all local lending data?");
@@ -152,7 +154,7 @@ describe("App", () => {
     const dbName = nextDbName();
     const first = render(<App dbName={dbName} />);
 
-    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt" }));
     expect(screen.getByLabelText("Enable global reminders")).toBeChecked();
     expect(screen.getByLabelText("Reminder offset (days)")).toHaveValue("1");
     expect(screen.getByLabelText("Reminder time")).toHaveValue("08:00");
@@ -164,7 +166,7 @@ describe("App", () => {
     first.unmount();
 
     render(<App dbName={dbName} />);
-    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt" }));
     await waitFor(() => expect(screen.getByLabelText("Reminder offset (days)")).toHaveValue("2"));
     expect(screen.getByLabelText("Reminder time")).toHaveValue("09:30");
   });
@@ -241,7 +243,7 @@ describe("App", () => {
     vi.stubGlobal("confirm", confirm);
     render(<App dbName={dbName} />);
 
-    await user.click(screen.getByRole("link", { name: "Settings" }));
+    await user.click(screen.getByRole("link", { name: "Cài đặt" }));
     await user.type(screen.getByLabelText("Backup passphrase"), "safe passphrase");
     await user.click(screen.getByRole("button", { name: "Backup" }));
     await waitFor(() => expect(backupBlob).toBeDefined());
@@ -300,7 +302,7 @@ describe("App", () => {
     render(<App dbName={dbName} />);
 
     await screen.findByRole("heading", { name: "Pham Thi D" });
-    await user.click(screen.getByRole("button", { name: "New loan" }));
+    await user.click(screen.getByRole("button", { name: "Thêm khoản vay" }));
     await user.type(screen.getByLabelText("Principal (VND)"), "10000000");
     await user.type(screen.getByLabelText("Disbursement date"), "2026-06-20");
     await user.selectOptions(screen.getByLabelText("Calculation model"), "equal-principal-flat-interest");
@@ -382,9 +384,9 @@ describe("App", () => {
 
     render(<App dbName={dbName} />);
 
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("Outstanding principal: 1,500,000 VND")).toBeInTheDocument());
-    expect(screen.getByText("Outstanding interest: 200,000 VND")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tổng quan" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Gốc còn phải thu: 1.500.000 đ")).toBeInTheDocument());
+    expect(screen.getByText("Lãi còn phải thu: 200.000 đ")).toBeInTheDocument();
   });
 
   it("persists a payment and a revision from the loan detail workflow", async () => {
@@ -482,7 +484,7 @@ describe("App", () => {
     expect(updatedLoan.defaultScheduleVersionId).not.toBe(version.id);
     expect(updatedLoan.calendarExportVersionId).toBe(version.id);
     expect(await repository.listScheduleEntries(version.id)).toEqual([entry]);
-    expect(screen.getByText("Outstanding principal: 1,000,000 VND")).toBeInTheDocument();
+    expect(screen.getByText("Outstanding principal: 1.000.000 đ")).toBeInTheDocument();
     expect(saveLoanBundle).toHaveBeenCalledTimes(1);
     expect(saveLoan).not.toHaveBeenCalled();
     expect(saveScheduleVersion).not.toHaveBeenCalled();

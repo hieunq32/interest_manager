@@ -29,25 +29,25 @@ describe("Dashboard", () => {
       summary({ loanId: "overdue", overdue: 3 }),
     ]} onOpenLoan={onOpenLoan} />);
 
-    expect(screen.getByRole("heading", { name: "Due today" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open loan due/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Upcoming" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open loan upcoming/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Promises" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open loan promised/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Overdue" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open loan overdue/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Đến hạn hôm nay" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mở khoản vay due/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sắp đến hạn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mở khoản vay upcoming/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Đã hứa trả" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mở khoản vay promised/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Quá hạn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Mở khoản vay overdue/ })).toBeInTheDocument();
     expect(screen.queryByText(/notification queue/i)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Open loan overdue/ }));
+    await user.click(screen.getByRole("button", { name: /Mở khoản vay overdue/ }));
     expect(onOpenLoan).toHaveBeenCalledWith("overdue");
   });
 
   it("shows an empty state for each actionable section", () => {
     render(<Dashboard summaries={[]} onOpenLoan={vi.fn()} />);
 
-    expect(screen.getAllByText("No loans in this section.")).toHaveLength(4);
-    expect(screen.getByText("0 active loans")).toBeInTheDocument();
-    expect(screen.getByText("Outstanding principal: 0 VND")).toBeInTheDocument();
+    expect(screen.getAllByText("Không có khoản vay trong mục này.")).toHaveLength(4);
+    expect(screen.getByText("0 khoản vay đang hoạt động")).toBeInTheDocument();
+    expect(screen.getByText("Gốc còn phải thu: 0 đ")).toBeInTheDocument();
   });
 });
