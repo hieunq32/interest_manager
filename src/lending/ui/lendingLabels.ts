@@ -1,20 +1,20 @@
 import type { CalculationModel, MoneyVnd, PartialPeriodInterestMode, RateUnit } from "../domain/types";
 
 export const calculationModelLabels: Record<CalculationModel, string> = {
-  "interest-only-final-principal": "Chỉ thu lãi, thu gốc khi tất toán",
-  "equal-principal-flat-interest": "Gốc đều, lãi phẳng",
+  "interest-only-final-principal": "Interest only, principal at maturity",
+  "equal-principal-flat-interest": "Equal principal, flat interest",
 };
 
 export const rateUnitLabels: Record<RateUnit, string> = {
-  monthly: "Theo tháng",
-  daily: "Theo ngày",
+  monthly: "Monthly",
+  daily: "Daily",
 };
 
 export const partialPeriodInterestModeLabels: Record<PartialPeriodInterestMode, string> = {
-  "full-period": "Đủ kỳ",
-  "calendar-day-prorated": "Tính theo ngày thực tế",
+  "full-period": "Full period",
+  "calendar-day-prorated": "Prorated by calendar day",
 };
 
 export function formatMoneyVnd(value: MoneyVnd): string {
-  return `${new Intl.NumberFormat("vi-VN").format(value)} đ`;
+  return `${new Intl.NumberFormat("en-US").format(value)} VND`;
 }
