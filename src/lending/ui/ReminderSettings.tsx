@@ -27,7 +27,7 @@ export function ReminderSettings({ value, onSave }: ReminderSettingsProps) {
 
   const save = async () => {
     const parsedOffsetDays = Number(offsetDays);
-    if (!Number.isInteger(parsedOffsetDays) || parsedOffsetDays < 0) {
+    if (!offsetDays.trim() || !Number.isInteger(parsedOffsetDays) || parsedOffsetDays < 0) {
       setError("Reminder offset must be a non-negative whole number");
       return;
     }

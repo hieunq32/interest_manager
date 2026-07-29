@@ -37,4 +37,16 @@ describe("ReminderSettings", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Reminder offset must be a non-negative whole number");
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  it("rejects a blank global reminder offset instead of saving it as zero", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<ReminderSettings value={defaultSettings} onSave={onSave} />);
+
+    await user.clear(screen.getByLabelText("Reminder offset (days)"));
+    await user.click(screen.getByRole("button", { name: "Save reminder settings" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Reminder offset must be a non-negative whole number");
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });

@@ -177,7 +177,7 @@ describe("iCalendar serialization", () => {
     ).toEqual([]);
   });
 
-  it("keeps an open future promise when its linked schedule entry is paid", () => {
+  it("excludes an open future promise when its linked schedule entry is paid", () => {
     expect(
       buildScheduleCalendarEvents({
         entries: [entry({ status: "paid" })],
@@ -187,17 +187,28 @@ describe("iCalendar serialization", () => {
         settings: settings(),
         today: "2026-07-10",
       }),
+    ).toEqual([]);
+  });
+
+  it("keeps an open future promise when its linked schedule entry is partially paid", () => {
+    expect(
+      buildScheduleCalendarEvents({
+        entries: [entry({ status: "partially-paid" })],
+        promises: [promise()],
+        borrowerName: "Lan Nguyen",
+        loanLabel: "Home loan",
+        settings: settings(),
+        today: "2026-07-10",
+      }),
     ).toEqual([
-      {
+      expect.objectContaining({
+        uid: "entry-version-7-entry-1@interest-manager.local",
+        summary: "Payment due: Home loan",
+      }),
+      expect.objectContaining({
         uid: "promise-version-7-promise-1@interest-manager.local",
-        date: "2026-07-15",
-        time: "08:00",
         summary: "Promise to pay: Home loan",
-        description:
-          "Borrower: Lan Nguyen\nLoan: Home loan\nSchedule version: version-7\nSchedule entry: entry-1\nPromise: promise-1\nPromised date: 2026-07-15\nNote: Will pay after payday",
-        reminderOffsetDays: 1,
-        dtstampUtc: "2026-07-10T00:00:00.000Z",
-      },
+      }),
     ]);
   });
 

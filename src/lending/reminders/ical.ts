@@ -187,6 +187,7 @@ export function buildScheduleCalendarEvents(input: {
     if (
       promise.status !== "open" ||
       entry === undefined ||
+      entry.status === "paid" ||
       compareDateOnly(promise.promisedDate, input.today) <= 0
     ) {
       continue;
