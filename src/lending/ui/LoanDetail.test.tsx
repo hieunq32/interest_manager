@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Loan, LoanLifecycleEvent, PaymentAdjustment, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../domain/types";
@@ -34,6 +34,11 @@ const entries: ScheduleEntry[] = [
 
 const payments: PaymentTransaction[] = [{ id: "payment-1", loanId: loan.id, scheduleEntryId: "entry-old", receivedAt: "2026-08-05", principalAmount: 500_000, interestAmount: 200_000, createdAt: loan.updatedAt }];
 const promises: PromiseToPay[] = [{ id: "promise-1", loanId: loan.id, scheduleEntryId: "entry-active", promisedDate: "2026-10-05", note: "Will pay next week", status: "open", createdAt: loan.updatedAt, updatedAt: loan.updatedAt }];
+const settlementPayments: PaymentTransaction[] = [
+  ...payments,
+  { id: "payment-old-remainder", loanId: loan.id, scheduleEntryId: "entry-old", receivedAt: "2026-10-06", principalAmount: 500_000, interestAmount: 0, createdAt: loan.updatedAt },
+  { id: "payment-active", loanId: loan.id, scheduleEntryId: "entry-active", receivedAt: "2026-10-06", principalAmount: 1_000_000, interestAmount: 200_000, createdAt: loan.updatedAt },
+];
 
 function loanDetailProps(overrides: Partial<React.ComponentProps<typeof LoanDetail>> = {}): React.ComponentProps<typeof LoanDetail> {
   return {
@@ -221,11 +226,7 @@ describe("LoanDetail", () => {
     const user = userEvent.setup();
     const onSettle = vi.fn().mockResolvedValue(undefined);
     renderLoanDetail({
-      payments: [
-        ...payments,
-        { id: "payment-old-remainder", loanId: loan.id, scheduleEntryId: "entry-old", receivedAt: "2026-10-06", principalAmount: 500_000, interestAmount: 0, createdAt: loan.updatedAt },
-        { id: "payment-active", loanId: loan.id, scheduleEntryId: "entry-active", receivedAt: "2026-10-06", principalAmount: 1_000_000, interestAmount: 200_000, createdAt: loan.updatedAt },
-      ],
+      payments: settlementPayments,
       onSettle,
     });
 
@@ -236,6 +237,58 @@ describe("LoanDetail", () => {
     await user.type(settlementDate, "2026-09-30");
     await user.click(screen.getByRole("button", { name: "Xác nhận tất toán" }));
     await waitFor(() => expect(onSettle).toHaveBeenCalledWith("2026-09-30"));
+  });
+
+  it("rejects a blank settlement date with a Vietnamese validation error", async () => {
+    const user = userEvent.setup();
+    const onSettle = vi.fn().mockResolvedValue(undefined);
+    renderLoanDetail({ payments: settlementPayments, onSettle });
+
+    await user.clear(screen.getByLabelText("Ngày tất toán"));
+    await user.click(screen.getByRole("button", { name: "Xác nhận tất toán" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Vui lòng nhập ngày tất toán hợp lệ");
+    expect(onSettle).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed settlement date with a Vietnamese validation error", async () => {
+    const user = userEvent.setup();
+    const onSettle = vi.fn().mockResolvedValue(undefined);
+    renderLoanDetail({ payments: settlementPayments, onSettle });
+
+    const settlementDate = screen.getByLabelText("Ngày tất toán");
+    settlementDate.setAttribute("type", "text");
+    fireEvent.change(settlementDate, { target: { value: "2026-02-30" } });
+    settlementDate.setAttribute("type", "date");
+    await user.click(screen.getByRole("button", { name: "Xác nhận tất toán" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Vui lòng nhập ngày tất toán hợp lệ");
+    expect(onSettle).not.toHaveBeenCalled();
+  });
+
+  it("submits exactly one settlement event while the first save is in flight", async () => {
+    let resolveSave!: () => void;
+    const pendingSave = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    const onSettle = vi.fn().mockReturnValue(pendingSave);
+    renderLoanDetail({ payments: settlementPayments, onSettle });
+
+    const submitButton = screen.getByRole("button", { name: "Xác nhận tất toán" });
+    const form = submitButton.closest("form");
+    expect(form).not.toBeNull();
+
+    fireEvent.submit(form!);
+    fireEvent.submit(form!);
+
+    expect(onSettle).toHaveBeenCalledTimes(1);
+    expect(submitButton).toBeDisabled();
+
+    await act(async () => {
+      resolveSave();
+      await pendingSave;
+    });
+    await waitFor(() => expect(submitButton).not.toBeDisabled());
   });
 
   it("shows settlement details, requires a reopening reason, and gates settled mutations", async () => {

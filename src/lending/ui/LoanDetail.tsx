@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, RotateCcw, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   calculateEntryStatus,
   calculateEntryTotals,
@@ -7,6 +7,7 @@ import {
   selectCurrentLoanEntries,
 } from "../domain/ledger";
 import { evaluateSettlementEligibility } from "../domain/loanLifecycle";
+import { isDateOnly } from "../domain/dateRules";
 import type { RevisionInput } from "../domain/revisions";
 import type { DateOnly, Loan, LoanLifecycleEvent, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../domain/types";
 import { Button } from "../../ui/Button";
@@ -96,9 +97,12 @@ export function LoanDetail({
   const [paymentCorrection, setPaymentCorrection] = useState<PaymentCorrection>();
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const [settlementDate, setSettlementDate] = useState(today);
+  const [settlementError, setSettlementError] = useState("");
   const [showReopenForm, setShowReopenForm] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopenError, setReopenError] = useState("");
+  const [isSavingLifecycle, setIsSavingLifecycle] = useState(false);
+  const lifecycleSaveInFlight = useRef(false);
   const activeVersion = versions.find((version) => version.id === loan.defaultScheduleVersionId);
   const currentEntries = selectCurrentLoanEntries({
     entries,
@@ -164,7 +168,21 @@ export function LoanDetail({
   };
 
   const settle = async () => {
-    await onSettle(settlementDate);
+    if (!isDateOnly(settlementDate)) {
+      setSettlementError(vi.errors.invalidSettlementDate);
+      return;
+    }
+    if (lifecycleSaveInFlight.current) return;
+
+    lifecycleSaveInFlight.current = true;
+    setIsSavingLifecycle(true);
+    setSettlementError("");
+    try {
+      await onSettle(settlementDate);
+    } finally {
+      lifecycleSaveInFlight.current = false;
+      setIsSavingLifecycle(false);
+    }
   };
 
   const reopen = async () => {
@@ -173,8 +191,17 @@ export function LoanDetail({
       setReopenError(vi.errors.reopenReasonRequired);
       return;
     }
+    if (lifecycleSaveInFlight.current) return;
+
+    lifecycleSaveInFlight.current = true;
+    setIsSavingLifecycle(true);
     setReopenError("");
-    await onReopen(reason);
+    try {
+      await onReopen(reason);
+    } finally {
+      lifecycleSaveInFlight.current = false;
+      setIsSavingLifecycle(false);
+    }
   };
 
   return (
@@ -279,13 +306,14 @@ export function LoanDetail({
               <textarea id="loan-reopen-reason" value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} />
             </label>
             {reopenError ? <p className="form-error" role="alert">{reopenError}</p> : null}
-            <Button icon={<RotateCcw aria-hidden="true" size={16} />} variant="primary" type="submit">{vi.loan.confirmReopen}</Button>
+            <Button icon={<RotateCcw aria-hidden="true" size={16} />} variant="primary" disabled={isSavingLifecycle} type="submit">{vi.loan.confirmReopen}</Button>
           </form> : null}
         </> : <>
           <p>{settlementEligibility.eligible ? vi.loan.eligibleForSettlement : vi.loan.ineligibleForSettlement}</p>
           {!settlementEligibility.eligible ? <p>{vi.loan.remainingBalance}: {formatMoneyVnd(settlementEligibility.outstandingPrincipal + settlementEligibility.outstandingInterest)}</p> : <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void settle(); }}>
             <Field id="loan-settlement-date" label={vi.loan.settlementDate} type="date" value={settlementDate} onChange={(event) => setSettlementDate(event.target.value)} />
-            <Button icon={<Check aria-hidden="true" size={16} />} variant="primary" type="submit">{vi.loan.confirmSettlement}</Button>
+            {settlementError ? <p className="form-error" role="alert">{settlementError}</p> : null}
+            <Button icon={<Check aria-hidden="true" size={16} />} variant="primary" disabled={isSavingLifecycle} type="submit">{vi.loan.confirmSettlement}</Button>
           </form>}
         </>}
       </section>

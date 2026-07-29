@@ -335,7 +335,12 @@ describe("IndexedDbLendingRepository", () => {
   it("persists loan lifecycle mutations as one batch", async () => {
     const store = new IndexedDbRecordStore(`lending-repository-test-${++dbCounter}`);
     const repository = new IndexedDbLendingRepository(store);
-    const settledLoan: Loan = { ...loan, status: "settled", updatedAt: "2026-07-28T02:00:00.000Z" };
+    const settledLoan: Loan = {
+      ...loan,
+      status: "settled",
+      settledAt: "2026-07-28",
+      updatedAt: "2026-07-28T02:00:00.000Z",
+    };
     const event: LoanLifecycleEvent = {
       id: "loan-lifecycle-event-1",
       loanId: loan.id,
@@ -344,6 +349,7 @@ describe("IndexedDbLendingRepository", () => {
       reason: "Balance cleared",
       createdAt: "2026-07-28T02:00:00.000Z",
     };
+    await repository.saveLoan(loan);
     const upsertRecords = vi.spyOn(store, "upsertRecords");
 
     await repository.saveLoanLifecycleMutation({ loan: settledLoan, event });
@@ -374,6 +380,7 @@ describe("IndexedDbLendingRepository", () => {
       createdAt: "2026-07-16T08:00:00.000Z",
     };
 
+    await repository.saveLoan(loan);
     await repository.saveLoanLifecycleMutation({
       loan: { ...loan, status: "settled", settledAt: settledEvent.effectiveDate, updatedAt: settledEvent.createdAt },
       event: settledEvent,
@@ -384,6 +391,38 @@ describe("IndexedDbLendingRepository", () => {
     });
 
     await expect(repository.listLoanLifecycleEvents(loan.id)).resolves.toEqual([settledEvent, reopenedEvent]);
+  });
+
+  it("uses the event ID as the lifecycle ordering tie-break for equal timestamps", async () => {
+    const repository = createRepository();
+    const createdAt = "2026-07-15T08:00:00.000Z";
+    const settledEvent: LoanLifecycleEvent = {
+      id: "z-settlement",
+      loanId: loan.id,
+      action: "settled",
+      effectiveDate: "2026-07-15",
+      createdAt,
+    };
+    const reopenedEvent: LoanLifecycleEvent = {
+      id: "a-reopening",
+      loanId: loan.id,
+      action: "reopened",
+      effectiveDate: "2026-07-15",
+      reason: "Correction required",
+      createdAt,
+    };
+
+    await repository.saveLoan(loan);
+    await repository.saveLoanLifecycleMutation({
+      loan: { ...loan, status: "settled", settledAt: settledEvent.effectiveDate, updatedAt: createdAt },
+      event: settledEvent,
+    });
+    await repository.saveLoanLifecycleMutation({
+      loan: { ...loan, status: "active", updatedAt: createdAt },
+      event: reopenedEvent,
+    });
+
+    await expect(repository.listLoanLifecycleEvents(loan.id)).resolves.toEqual([reopenedEvent, settledEvent]);
   });
 
   it("rejects a lifecycle event that belongs to another loan", async () => {
@@ -415,6 +454,155 @@ describe("IndexedDbLendingRepository", () => {
       .rejects.toThrow("lifecycle event action must match loan status");
   });
 
+  it("rejects settlement when the persisted source loan is not active", async () => {
+    for (const status of ["draft", "archived", "settled"] as const) {
+      const repository = createRepository();
+      await repository.saveLoan({
+        ...loan,
+        status,
+        ...(status === "settled" ? { settledAt: "2026-07-27" } : {}),
+      });
+
+      await expect(repository.saveLoanLifecycleMutation({
+        loan: {
+          ...loan,
+          status: "settled",
+          settledAt: "2026-07-28",
+          updatedAt: "2026-07-28T02:00:00.000Z",
+        },
+        event: {
+          id: `settlement-from-${status}`,
+          loanId: loan.id,
+          action: "settled",
+          effectiveDate: "2026-07-28",
+          createdAt: "2026-07-28T02:00:00.000Z",
+        },
+      })).rejects.toThrow("persisted loan must be active to settle");
+    }
+  });
+
+  it("rejects reopening when the persisted source loan is not settled", async () => {
+    for (const status of ["active", "draft", "archived"] as const) {
+      const repository = createRepository();
+      await repository.saveLoan({ ...loan, status });
+
+      await expect(repository.saveLoanLifecycleMutation({
+        loan: { ...loan, status: "active", updatedAt: "2026-07-28T02:00:00.000Z" },
+        event: {
+          id: `reopening-from-${status}`,
+          loanId: loan.id,
+          action: "reopened",
+          effectiveDate: "2026-07-28",
+          reason: "Correction required",
+          createdAt: "2026-07-28T02:00:00.000Z",
+        },
+      })).rejects.toThrow("persisted loan must be settled to reopen");
+    }
+  });
+
+  it("rejects lifecycle mutations for a loan that is not persisted", async () => {
+    const repository = createRepository();
+
+    await expect(repository.saveLoanLifecycleMutation({
+      loan: {
+        ...loan,
+        status: "settled",
+        settledAt: "2026-07-28",
+        updatedAt: "2026-07-28T02:00:00.000Z",
+      },
+      event: {
+        id: "settlement-missing-loan",
+        loanId: loan.id,
+        action: "settled",
+        effectiveDate: "2026-07-28",
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    })).rejects.toThrow("persisted loan is required for lifecycle mutation");
+  });
+
+  it.each([
+    ["", "2026-07-28", "settledAt must be a valid DateOnly"],
+    ["2026-02-30", "2026-02-30", "settledAt must be a valid DateOnly"],
+    ["2026-07-27", "2026-07-28", "settledAt must match lifecycle effectiveDate"],
+  ])("rejects invalid settlement state with settledAt %j and effectiveDate %j", async (settledAt, effectiveDate, error) => {
+    const repository = createRepository();
+    await repository.saveLoan(loan);
+
+    await expect(repository.saveLoanLifecycleMutation({
+      loan: {
+        ...loan,
+        status: "settled",
+        settledAt,
+        updatedAt: "2026-07-28T02:00:00.000Z",
+      },
+      event: {
+        id: "invalid-settlement",
+        loanId: loan.id,
+        action: "settled",
+        effectiveDate,
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    })).rejects.toThrow(error);
+  });
+
+  it("rejects a malformed lifecycle effective date", async () => {
+    const repository = createRepository();
+    await repository.saveLoan(loan);
+
+    await expect(repository.saveLoanLifecycleMutation({
+      loan: {
+        ...loan,
+        status: "settled",
+        settledAt: "2026-07-28",
+        updatedAt: "2026-07-28T02:00:00.000Z",
+      },
+      event: {
+        id: "invalid-effective-date",
+        loanId: loan.id,
+        action: "settled",
+        effectiveDate: "2026/07/28",
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    })).rejects.toThrow("effectiveDate must be a valid DateOnly");
+  });
+
+  it("rejects reopening without a trimmed reason or with a retained settlement date", async () => {
+    const settledLoan: Loan = { ...loan, status: "settled", settledAt: "2026-07-27" };
+    const repositoryWithoutReason = createRepository();
+    await repositoryWithoutReason.saveLoan(settledLoan);
+
+    await expect(repositoryWithoutReason.saveLoanLifecycleMutation({
+      loan: { ...loan, status: "active", updatedAt: "2026-07-28T02:00:00.000Z" },
+      event: {
+        id: "reopening-without-reason",
+        loanId: loan.id,
+        action: "reopened",
+        effectiveDate: "2026-07-28",
+        reason: "   ",
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    })).rejects.toThrow("reopen reason is required");
+
+    const repositoryWithSettledAt = createRepository();
+    await repositoryWithSettledAt.saveLoan(settledLoan);
+    await expect(repositoryWithSettledAt.saveLoanLifecycleMutation({
+      loan: {
+        ...loan,
+        status: "active",
+        settledAt: "2026-07-27",
+        updatedAt: "2026-07-28T02:00:00.000Z",
+      },
+      event: {
+        id: "reopening-with-settled-at",
+        loanId: loan.id,
+        action: "reopened",
+        effectiveDate: "2026-07-28",
+        reason: "Correction required",
+        createdAt: "2026-07-28T02:00:00.000Z",
+      },
+    })).rejects.toThrow("reopened loan must not retain settledAt");
+  });
+
   it("clears settled calendar exports and preserves lifecycle events through restore", async () => {
     const source = createRepository();
     const settledLoan: Loan = {
@@ -437,7 +625,9 @@ describe("IndexedDbLendingRepository", () => {
       loanId: "other-loan",
     };
 
+    await source.saveLoan(loan);
     await source.saveLoanLifecycleMutation({ loan: settledLoan, event });
+    await source.saveLoan({ ...loan, id: "other-loan" });
     await source.saveLoanLifecycleMutation({
       loan: { ...loan, id: "other-loan", status: "settled", settledAt: "2026-07-28" },
       event: unrelatedEvent,

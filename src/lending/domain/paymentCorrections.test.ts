@@ -150,6 +150,35 @@ describe("payment corrections", () => {
     expect(() => buildPaymentCorrection({ ...input, next: { ...nextPayment, interestAmount: 1.5 } })).toThrow(/interest/i);
   });
 
+  it("rejects a correction with no positive received component", () => {
+    expect(() =>
+      buildPaymentCorrection({
+        payment: legacyPayment,
+        next: { ...nextPayment, principalAmount: 0, interestAmount: 0 },
+        reason: "Corrected receipt",
+        adjustmentId: "adjustment-1",
+        replacementId: "payment-2",
+        now,
+      }),
+    ).toThrow("At least one received amount must be positive");
+  });
+
+  it.each([
+    ["a blank received date", ""],
+    ["a malformed received date", "2026-02-30"],
+  ])("rejects %s", (_description, receivedAt) => {
+    expect(() =>
+      buildPaymentCorrection({
+        payment: legacyPayment,
+        next: { ...nextPayment, receivedAt },
+        reason: "Corrected receipt",
+        adjustmentId: "adjustment-1",
+        replacementId: "payment-2",
+        now,
+      }),
+    ).toThrow("receivedAt must be a valid DateOnly");
+  });
+
   it("rejects corrections and cancellations for a payment that is not active", () => {
     const adjustedPayment = { ...legacyPayment, status: "adjusted" as const };
 

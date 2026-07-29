@@ -14,6 +14,7 @@ import type {
   ScheduleVersion,
 } from "../domain/types";
 import { normalizePayment } from "../domain/paymentCorrections";
+import { isDateOnly } from "../domain/dateRules";
 import {
   LENDING_RECORD_TYPES,
   LENDING_REMINDER_SETTINGS_RECORD_ID,
@@ -176,8 +177,46 @@ export class IndexedDbLendingRepository implements LendingRepository {
     if (value.event.loanId !== value.loan.id) {
       throw new Error("lifecycle event loan ID must match loan ID");
     }
-    if ((value.event.action === "settled") !== (value.loan.status === "settled")) {
+    if (
+      (value.event.action === "settled" && value.loan.status !== "settled") ||
+      (value.event.action === "reopened" && value.loan.status !== "active")
+    ) {
       throw new Error("lifecycle event action must match loan status");
+    }
+    if (value.event.action === "settled") {
+      if (!isDateOnly(value.loan.settledAt ?? "")) {
+        throw new Error("settledAt must be a valid DateOnly");
+      }
+      if (!isDateOnly(value.event.effectiveDate)) {
+        throw new Error("effectiveDate must be a valid DateOnly");
+      }
+      if (value.loan.settledAt !== value.event.effectiveDate) {
+        throw new Error("settledAt must match lifecycle effectiveDate");
+      }
+    } else {
+      if (!isDateOnly(value.event.effectiveDate)) {
+        throw new Error("effectiveDate must be a valid DateOnly");
+      }
+      if (value.event.reason?.trim() === "") {
+        throw new Error("reopen reason is required");
+      }
+      if (!value.event.reason) {
+        throw new Error("reopen reason is required");
+      }
+      if (value.loan.settledAt !== undefined) {
+        throw new Error("reopened loan must not retain settledAt");
+      }
+    }
+
+    const persistedLoan = (await this.listLoans()).find((loan) => loan.id === value.loan.id);
+    if (!persistedLoan) {
+      throw new Error("persisted loan is required for lifecycle mutation");
+    }
+    if (value.event.action === "settled" && persistedLoan.status !== "active") {
+      throw new Error("persisted loan must be active to settle");
+    }
+    if (value.event.action === "reopened" && persistedLoan.status !== "settled") {
+      throw new Error("persisted loan must be settled to reopen");
     }
 
     await this.store.upsertRecords([

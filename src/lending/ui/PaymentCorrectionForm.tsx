@@ -46,7 +46,7 @@ export function PaymentCorrectionForm({ payment, mode, onSave, onCancel }: Payme
       }
 
       if (!isDateOnly(receivedAt)) {
-        throw new Error("Received date is required");
+        throw new Error("receivedAt must be a valid DateOnly");
       }
       const next: PaymentSnapshot = {
         scheduleEntryId: payment.scheduleEntryId,

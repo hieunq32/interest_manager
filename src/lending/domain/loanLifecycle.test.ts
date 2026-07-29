@@ -112,6 +112,19 @@ describe("loan settlement", () => {
       now: "2026-07-30T12:00:00.000Z",
     })).toThrow("loan is not eligible for settlement");
   });
+
+  it.each([
+    ["a blank date", ""],
+    ["a malformed date", "2026-02-30"],
+  ])("rejects settlement with %s", (_description, settlementDate) => {
+    expect(() => settleLoan({
+      loan: loan(),
+      summary: summary(),
+      settlementDate,
+      eventId: "event-1",
+      now: "2026-07-30T12:00:00.000Z",
+    })).toThrow("settlement date must be a valid DateOnly");
+  });
 });
 
 describe("loan reopening", () => {
@@ -159,5 +172,15 @@ describe("loan reopening", () => {
       effectiveDate: "2026-07-30",
       now: "2026-07-30T12:00:00.000Z",
     })).toThrow("loan must be settled to reopen");
+  });
+
+  it.each(["", "2026-02-30"])("rejects reopening with invalid effective date %j", (effectiveDate) => {
+    expect(() => reopenLoan({
+      loan: loan({ status: "settled", settledAt: "2026-07-15" }),
+      reason: "Corrected a voided payment",
+      eventId: "event-2",
+      effectiveDate,
+      now: "2026-07-30T12:00:00.000Z",
+    })).toThrow("effective date must be a valid DateOnly");
   });
 });

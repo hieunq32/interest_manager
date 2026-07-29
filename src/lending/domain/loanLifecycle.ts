@@ -1,5 +1,6 @@
 import type { LoanSummary } from "./ledger";
 import type { DateOnly, Loan, LoanLifecycleEvent, MoneyVnd } from "./types";
+import { isDateOnly } from "./dateRules";
 
 export interface SettlementEligibility {
   eligible: boolean;
@@ -27,6 +28,9 @@ export function settleLoan(input: {
   }
   if (!evaluateSettlementEligibility(input.summary).eligible) {
     throw new Error("loan is not eligible for settlement");
+  }
+  if (!isDateOnly(input.settlementDate)) {
+    throw new Error("settlement date must be a valid DateOnly");
   }
 
   return {
@@ -58,6 +62,9 @@ export function reopenLoan(input: {
   }
   if (input.reason.trim() === "") {
     throw new Error("reason is required");
+  }
+  if (!isDateOnly(input.effectiveDate)) {
+    throw new Error("effective date must be a valid DateOnly");
   }
 
   const { settledAt: _settledAt, ...loan } = input.loan;

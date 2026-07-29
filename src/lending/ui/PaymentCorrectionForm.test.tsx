@@ -70,4 +70,50 @@ describe("PaymentCorrectionForm", () => {
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(undefined, "Duplicate receipt"));
   });
+
+  it("rejects a correction whose principal and interest are both zero", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<PaymentCorrectionForm payment={payment} mode="edit" onSave={onSave} onCancel={vi.fn()} />);
+
+    await user.clear(screen.getByLabelText("Gốc đã thu (đ)"));
+    await user.type(screen.getByLabelText("Gốc đã thu (đ)"), "0");
+    await user.clear(screen.getByLabelText("Lãi đã thu (đ)"));
+    await user.type(screen.getByLabelText("Lãi đã thu (đ)"), "0");
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Corrected receipt");
+    await user.click(screen.getByRole("button", { name: "Lưu điều chỉnh" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Số tiền phải lớn hơn 0");
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("rejects a blank received date with a Vietnamese validation error", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<PaymentCorrectionForm payment={payment} mode="edit" onSave={onSave} onCancel={vi.fn()} />);
+
+    await user.clear(screen.getByLabelText("Ngày thu"));
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Corrected receipt");
+    await user.click(screen.getByRole("button", { name: "Lưu điều chỉnh" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Vui lòng nhập ngày thu hợp lệ");
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed received date with a Vietnamese validation error", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<PaymentCorrectionForm
+      payment={{ ...payment, receivedAt: "2026-02-30" }}
+      mode="edit"
+      onSave={onSave}
+      onCancel={vi.fn()}
+    />);
+
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Corrected receipt");
+    await user.click(screen.getByRole("button", { name: "Lưu điều chỉnh" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Vui lòng nhập ngày thu hợp lệ");
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,5 @@
 import { assertValidMoney } from "./money";
+import { isDateOnly } from "./dateRules";
 import type {
   PaymentAdjustment,
   PaymentCancellationMutation,
@@ -32,8 +33,14 @@ function assertActivePayment(payment: PaymentTransaction): PaymentTransaction {
 }
 
 function assertValidSnapshot(snapshot: PaymentSnapshot): void {
+  if (!isDateOnly(snapshot.receivedAt)) {
+    throw new Error("receivedAt must be a valid DateOnly");
+  }
   assertValidMoney(snapshot.principalAmount, "principalAmount");
   assertValidMoney(snapshot.interestAmount, "interestAmount");
+  if (snapshot.principalAmount === 0 && snapshot.interestAmount === 0) {
+    throw new Error("At least one received amount must be positive");
+  }
 }
 
 export function normalizePayment(value: PaymentTransaction): PaymentTransaction {
