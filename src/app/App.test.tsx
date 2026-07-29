@@ -841,6 +841,36 @@ describe("App", () => {
     expect(screen.getByText("Lãi còn phải thu: 18.000 đ")).toBeInTheDocument();
     const replacement = (await repository.listPayments(history.loan.id))[0];
     expect(replacement).toMatchObject({ principalAmount: 120_000, interestAmount: 2_000, status: "active" });
+    const originalPayment = (await repository.listPaymentHistory(history.loan.id)).find((payment) => payment.id === history.payment.id)!;
+    expect(originalPayment).toEqual({
+      ...history.payment,
+      status: "adjusted",
+      updatedAt: expect.any(String),
+    });
+    const [editAdjustment] = await repository.listPaymentAdjustments(history.loan.id);
+    expect(editAdjustment).toEqual({
+      id: expect.any(String),
+      loanId: history.loan.id,
+      paymentId: history.payment.id,
+      replacementPaymentId: replacement.id,
+      action: "edit",
+      reason: "Replacement was too high",
+      before: {
+        scheduleEntryId: history.entry.id,
+        receivedAt: "2026-07-05",
+        principalAmount: 100_000,
+        interestAmount: 2_000,
+        note: undefined,
+      },
+      after: {
+        scheduleEntryId: history.entry.id,
+        receivedAt: "2026-07-05",
+        principalAmount: 120_000,
+        interestAmount: 2_000,
+        note: undefined,
+      },
+      createdAt: expect.any(String),
+    });
 
     await user.click(screen.getByRole("button", { name: "Hủy giao dịch" }));
     await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Replacement rejected");
@@ -848,6 +878,31 @@ describe("App", () => {
 
     expect(await screen.findByText("Gốc còn phải thu: 1.000.000 đ")).toBeInTheDocument();
     expect(screen.getByText("Lãi còn phải thu: 20.000 đ")).toBeInTheDocument();
+    const voidedReplacement = (await repository.listPaymentHistory(history.loan.id)).find((payment) => payment.id === replacement.id)!;
+    expect(voidedReplacement).toEqual({
+      ...replacement,
+      status: "voided",
+      updatedAt: expect.any(String),
+    });
+    const adjustmentsAfterVoid = await repository.listPaymentAdjustments(history.loan.id);
+    const persistedEditAdjustment = adjustmentsAfterVoid.find((adjustment) => adjustment.action === "edit")!;
+    const voidAdjustment = adjustmentsAfterVoid.find((adjustment) => adjustment.action === "void")!;
+    expect(persistedEditAdjustment).toEqual(editAdjustment);
+    expect(voidAdjustment).toEqual({
+      id: expect.any(String),
+      loanId: history.loan.id,
+      paymentId: replacement.id,
+      action: "void",
+      reason: "Replacement rejected",
+      before: {
+        scheduleEntryId: history.entry.id,
+        receivedAt: "2026-07-05",
+        principalAmount: 120_000,
+        interestAmount: 2_000,
+        note: undefined,
+      },
+      createdAt: expect.any(String),
+    });
 
     await user.click(screen.getAllByRole("button", { name: "Ghi nhận khoản thu" })[0]);
     await user.type(screen.getByLabelText("Ngày thu"), "2026-07-15");
@@ -856,10 +911,31 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Lưu khoản thu" }));
 
     expect(await screen.findByText("Đủ điều kiện tất toán")).toBeInTheDocument();
+    const fullPayment = (await repository.listPayments(history.loan.id)).find((payment) => payment.id !== replacement.id)!;
+    expect(fullPayment).toEqual({
+      id: expect.any(String),
+      loanId: history.loan.id,
+      scheduleEntryId: history.entry.id,
+      receivedAt: "2026-07-15",
+      principalAmount: 1_000_000,
+      interestAmount: 20_000,
+      note: undefined,
+      createdAt: expect.any(String),
+      status: "active",
+      updatedAt: expect.any(String),
+    });
     await user.clear(screen.getByLabelText("Ngày tất toán"));
     await user.type(screen.getByLabelText("Ngày tất toán"), "2026-07-15");
     await user.click(screen.getByRole("button", { name: "Xác nhận tất toán" }));
     await screen.findByText("Đã tất toán khoản vay");
+    const [settlementEvent] = await repository.listLoanLifecycleEvents(history.loan.id);
+    expect(settlementEvent).toEqual({
+      id: expect.any(String),
+      loanId: history.loan.id,
+      action: "settled",
+      effectiveDate: "2026-07-15",
+      createdAt: expect.any(String),
+    });
     first.unmount();
 
     const settled = render(<App dbName={dbName} />);
@@ -875,24 +951,37 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Lý do mở lại khoản vay"), "Correction needs another review");
     await user.click(screen.getByRole("button", { name: "Xác nhận mở lại" }));
     await screen.findByText("Đã mở lại khoản vay");
+    const [, reopenEvent] = await repository.listLoanLifecycleEvents(history.loan.id);
+    expect(reopenEvent).toEqual({
+      id: expect.any(String),
+      loanId: history.loan.id,
+      action: "reopened",
+      effectiveDate: expect.any(String),
+      reason: "Correction needs another review",
+      createdAt: expect.any(String),
+    });
     settled.unmount();
 
     render(<App dbName={dbName} />);
     expect(await screen.findByText("Đủ điều kiện tất toán")).toBeInTheDocument();
-    await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([
-      expect.objectContaining({ id: history.loan.id, status: "active" }),
+    await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([{
+      ...history.loan,
+      status: "active",
+      updatedAt: expect.any(String),
+    }]);
+    await expect(repository.listPaymentHistory(history.loan.id)).resolves.toEqual([
+      ...[originalPayment, voidedReplacement, fullPayment].sort((left, right) => left.id.localeCompare(right.id)),
     ]);
-    await expect(repository.listPaymentHistory(history.loan.id)).resolves.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: history.payment.id, status: "adjusted" }),
-      expect.objectContaining({ id: replacement.id, status: "voided" }),
-    ]));
+    await expect(repository.listPaymentAdjustments(history.loan.id)).resolves.toEqual([
+      ...[editAdjustment, voidAdjustment].sort((left, right) => left.id.localeCompare(right.id)),
+    ]);
     await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual([
-      expect.objectContaining({ action: "settled", effectiveDate: "2026-07-15" }),
-      expect.objectContaining({ action: "reopened", reason: "Correction needs another review" }),
+      settlementEvent,
+      reopenEvent,
     ]);
     expect(confirm).toHaveBeenCalledWith("Xác nhận hủy giao dịch");
     confirm.mockRestore();
-  });
+  }, 10_000);
 
   it("filters borrower loans from current collection data without changing IndexedDB", async () => {
     const user = userEvent.setup();
