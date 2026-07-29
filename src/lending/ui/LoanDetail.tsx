@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, Check, CircleDollarSign, Pencil, RotateCcw, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   calculateEntryStatus,
   calculateEntryTotals,
@@ -125,6 +125,14 @@ export function LoanDetail({
       adjustments: paymentAdjustments.filter((adjustment) => adjustment.paymentId === payment.id),
     }));
 
+  useEffect(() => {
+    if (isSettled) {
+      setEntryForm(undefined);
+      setPaymentCorrection(undefined);
+      setShowRevisionForm(false);
+    }
+  }, [isSettled]);
+
   const changePromiseStatus = async (promise: PromiseToPay, status: "fulfilled" | "cancelled") => {
     await onUpdatePromise({ ...promise, status, updatedAt: new Date().toISOString() });
   };
@@ -238,14 +246,14 @@ export function LoanDetail({
         })}
       </section>
 
-      {entryForm ? <section className="schedule-preview" aria-labelledby="entry-form-heading">
+      {!isSettled && entryForm ? <section className="schedule-preview" aria-labelledby="entry-form-heading">
         <h3 id="entry-form-heading">{entryForm.kind === "payment" ? vi.payment.record : vi.promise.record}</h3>
         {entryForm.kind === "payment"
           ? <PaymentForm loanId={loan.id} scheduleEntryId={entryForm.entryId} onSave={savePayment} />
           : <PromiseForm loanId={loan.id} scheduleEntryId={entryForm.entryId} onSave={savePromise} />}
       </section> : null}
 
-      {paymentCorrection ? <section className="schedule-preview" aria-labelledby="payment-correction-heading">
+      {!isSettled && paymentCorrection ? <section className="schedule-preview" aria-labelledby="payment-correction-heading">
         <h3 id="payment-correction-heading">{paymentCorrection.mode === "edit" ? vi.payment.edit : vi.payment.void}</h3>
         <PaymentCorrectionForm payment={paymentCorrection.payment} mode={paymentCorrection.mode} onSave={savePaymentCorrection} onCancel={() => setPaymentCorrection(undefined)} />
       </section> : null}

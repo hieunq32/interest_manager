@@ -35,31 +35,35 @@ const entries: ScheduleEntry[] = [
 const payments: PaymentTransaction[] = [{ id: "payment-1", loanId: loan.id, scheduleEntryId: "entry-old", receivedAt: "2026-08-05", principalAmount: 500_000, interestAmount: 200_000, createdAt: loan.updatedAt }];
 const promises: PromiseToPay[] = [{ id: "promise-1", loanId: loan.id, scheduleEntryId: "entry-active", promisedDate: "2026-10-05", note: "Will pay next week", status: "open", createdAt: loan.updatedAt, updatedAt: loan.updatedAt }];
 
+function loanDetailProps(overrides: Partial<React.ComponentProps<typeof LoanDetail>> = {}): React.ComponentProps<typeof LoanDetail> {
+  return {
+    loan,
+    borrowerName: "Nguyen Van A",
+    versions,
+    entries,
+    payments,
+    paymentHistory: payments,
+    paymentAdjustments: [],
+    promises,
+    today: "2026-10-06",
+    lifecycleEvents: [],
+    onBack: vi.fn(),
+    onSavePayment: vi.fn().mockResolvedValue(undefined),
+    onEditPayment: vi.fn().mockResolvedValue(undefined),
+    onCancelPayment: vi.fn().mockResolvedValue(undefined),
+    onSavePromise: vi.fn().mockResolvedValue(undefined),
+    onUpdatePromise: vi.fn().mockResolvedValue(undefined),
+    onSaveRevision: vi.fn().mockResolvedValue(undefined),
+    onSaveReminderOverride: vi.fn().mockResolvedValue(undefined),
+    onExportCalendar: vi.fn(),
+    onSettle: vi.fn().mockResolvedValue(undefined),
+    onReopen: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
 function renderLoanDetail(overrides: Partial<React.ComponentProps<typeof LoanDetail>> = {}) {
-  return render(<LoanDetail
-    loan={loan}
-    borrowerName="Nguyen Van A"
-    versions={versions}
-    entries={entries}
-    payments={payments}
-    paymentHistory={payments}
-    paymentAdjustments={[]}
-    promises={promises}
-    today="2026-10-06"
-    lifecycleEvents={[]}
-    onBack={vi.fn()}
-    onSavePayment={vi.fn().mockResolvedValue(undefined)}
-    onEditPayment={vi.fn().mockResolvedValue(undefined)}
-    onCancelPayment={vi.fn().mockResolvedValue(undefined)}
-    onSavePromise={vi.fn().mockResolvedValue(undefined)}
-    onUpdatePromise={vi.fn().mockResolvedValue(undefined)}
-    onSaveRevision={vi.fn().mockResolvedValue(undefined)}
-    onSaveReminderOverride={vi.fn().mockResolvedValue(undefined)}
-    onExportCalendar={vi.fn()}
-    onSettle={vi.fn().mockResolvedValue(undefined)}
-    onReopen={vi.fn().mockResolvedValue(undefined)}
-    {...overrides}
-  />);
+  return render(<LoanDetail {...loanDetailProps(overrides)} />);
 }
 
 describe("LoanDetail", () => {
@@ -186,6 +190,23 @@ describe("LoanDetail", () => {
     expect(screen.queryAllByRole("button", { name: "Ghi nhận khoản thu" })).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Sửa giao dịch" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Hủy giao dịch" })).not.toBeInTheDocument();
+  });
+
+  it("removes an opened payment form when the loan becomes settled", async () => {
+    const user = userEvent.setup();
+    const onSavePayment = vi.fn().mockResolvedValue(undefined);
+    const view = renderLoanDetail({ onSavePayment });
+
+    await user.click(screen.getAllByRole("button", { name: "Ghi nhận khoản thu" })[0]);
+    expect(screen.getByRole("button", { name: "Lưu khoản thu" })).toBeInTheDocument();
+
+    view.rerender(<LoanDetail {...loanDetailProps({
+      loan: { ...loan, status: "settled", settledAt: "2026-10-06" },
+      onSavePayment,
+    })} />);
+
+    expect(screen.queryByRole("button", { name: "Lưu khoản thu" })).not.toBeInTheDocument();
+    expect(onSavePayment).not.toHaveBeenCalled();
   });
 
   it("shows remaining balances without a settlement confirmation when the loan is ineligible", () => {
