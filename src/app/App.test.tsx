@@ -23,7 +23,9 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "Trang chủ" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cài đặt" })).toBeInTheDocument();
     expect(screen.getByText("Đang online")).toBeInTheDocument();
-    expect(await screen.findByText("Storage ready")).toBeInTheDocument();
+    expect(screen.getByText("Sẵn sàng")).toBeInTheDocument();
+    expect(await screen.findByText("Bộ nhớ sẵn sàng")).toBeInTheDocument();
+    expect(screen.getByText("0 bản ghi")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Tổng quan" })).toBeInTheDocument();
     expect(screen.getByText("0 khoản vay đang hoạt động")).toBeInTheDocument();
   });
@@ -40,6 +42,46 @@ describe("App", () => {
       window.dispatchEvent(new Event("online"));
     });
     expect(await screen.findByText("Đang online")).toBeInTheDocument();
+  });
+
+  it("renders unavailable storage and plural record counts in Vietnamese", async () => {
+    const getHealth = vi.spyOn(IndexedDbRecordStore.prototype, "getHealth").mockResolvedValue({
+      available: false,
+      recordCount: 2,
+      message: "Storage unavailable",
+    });
+
+    try {
+      render(<App dbName={nextDbName()} />);
+
+      expect(screen.getByText("Đang kiểm tra bộ nhớ")).toBeInTheDocument();
+      expect(await screen.findByText("Bộ nhớ không khả dụng")).toBeInTheDocument();
+      expect(screen.getByText("2 bản ghi")).toBeInTheDocument();
+    } finally {
+      getHealth.mockRestore();
+    }
+  });
+
+  it("renders Vietnamese PWA and borrower save status messages", async () => {
+    const user = userEvent.setup();
+    render(<App dbName={nextDbName()} />);
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("interest-manager:pwa-error", { detail: {} }));
+    });
+    expect(await screen.findByText("Bộ nhớ đệm ngoại tuyến không khả dụng")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Thêm người vay" }));
+    await user.type(screen.getByLabelText("Tên hiển thị"), "Tran Thi B");
+    await user.click(screen.getByRole("button", { name: "Lưu người vay" }));
+    expect(await screen.findByText("Đã lưu người vay")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sửa người vay" }));
+    await user.click(screen.getByRole("button", { name: "Lưu trữ người vay" }));
+    expect(await screen.findByText("Đã lưu trữ người vay")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Trang chủ" }));
+    await screen.findByRole("button", { name: "Thêm người vay" });
   });
 
   it("creates a borrower and navigates to its persisted detail route", async () => {
@@ -114,7 +156,7 @@ describe("App", () => {
     await user.upload(screen.getByLabelText("Backup file"), file);
 
     await waitFor(() => expect(confirm).toHaveBeenCalledWith("Replace local records with this backup?"));
-    await waitFor(() => expect(screen.getByText("1 record")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("1 bản ghi")).toBeInTheDocument());
     vi.unstubAllGlobals();
   });
 
@@ -141,7 +183,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Reset lending data" }));
 
     expect(confirm).toHaveBeenCalledWith("Clear all local lending data?");
-    await waitFor(() => expect(screen.getByText("Local lending data reset")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Đã xóa dữ liệu cho vay cục bộ")).toBeInTheDocument());
     await expect(repository.listAllDomainRecords()).resolves.toEqual([]);
     await expect(store.listRecordsByType("system.smoke")).resolves.toEqual([
       expect.objectContaining({ data: { retained: true } }),
@@ -450,7 +492,7 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: "Loan details" });
     await user.click(screen.getByRole("button", { name: "Export Calendar" }));
-    await screen.findByText("Calendar export marked current");
+    await screen.findByText("Đã cập nhật trạng thái lịch Calendar");
     expect(onCalendarExport).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining("BEGIN:VCALENDAR"),
       loanId: loan.id,
@@ -462,7 +504,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Principal received (VND)"), "1000000");
     await user.type(screen.getByLabelText("Interest received (VND)"), "20000");
     await user.click(screen.getByRole("button", { name: "Save payment" }));
-    await screen.findByText("Payment recorded");
+    await screen.findByText("Đã ghi nhận khoản thu");
     expect(await repository.listPayments(loan.id)).toEqual([expect.objectContaining({ principalAmount: 1_000_000, interestAmount: 20_000 })]);
     await user.click(screen.getByRole("button", { name: "Export Calendar" }));
     await waitFor(() => expect(onCalendarExport).toHaveBeenCalledTimes(2));
@@ -478,7 +520,7 @@ describe("App", () => {
     await user.clear(screen.getByLabelText("Maturity date"));
     await user.type(screen.getByLabelText("Maturity date"), "2027-01-15");
     await user.click(screen.getByRole("button", { name: "Save revision" }));
-    await screen.findByText("Schedule revised; Calendar export is stale");
+    await screen.findByText("Đã điều chỉnh lịch thu; lịch Calendar cần xuất lại");
     await waitFor(async () => expect(await repository.listScheduleVersions(loan.id)).toHaveLength(2));
     const [updatedLoan] = await repository.listLoans(borrower.id);
     expect(updatedLoan.defaultScheduleVersionId).not.toBe(version.id);

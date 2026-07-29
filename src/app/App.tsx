@@ -46,7 +46,15 @@ const initialHealth: StorageHealth = {
 };
 
 function recordLabel(count: number): string {
-  return count === 1 ? "1 record" : `${count} records`;
+  return vi.shellStatus.recordCount(count);
+}
+
+function storageStatusLabel(message: string): string {
+  return vi.shellStatus.storage[message as keyof typeof vi.shellStatus.storage] ?? vi.shellStatus.storage["Storage unavailable"];
+}
+
+function shellMessageLabel(message: string): string {
+  return vi.shellStatus.messages[message as keyof typeof vi.shellStatus.messages] ?? vi.shellStatus.messages.unknown;
 }
 
 function todayFileName(): string {
@@ -506,10 +514,10 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       </section>
 
       <section className="status-strip" aria-label="System status">
-        <StatusBadge tone={isOnline ? "ok" : "warn"}>{isOnline ? "Đang online" : "Đang offline"}</StatusBadge>
-        <StatusBadge tone={health.available ? "ok" : "error"}>{health.message}</StatusBadge>
+        <StatusBadge tone={isOnline ? "ok" : "warn"}>{isOnline ? vi.shellStatus.online : vi.shellStatus.offline}</StatusBadge>
+        <StatusBadge tone={health.available ? "ok" : "error"}>{storageStatusLabel(health.message)}</StatusBadge>
         <span className="record-count">{recordLabel(health.recordCount)}</span>
-        <span className="status-message">{message}</span>
+        <span className="status-message">{shellMessageLabel(message)}</span>
       </section>
 
       {routeContent}
