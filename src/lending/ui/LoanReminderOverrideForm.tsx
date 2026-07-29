@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { ReminderOverride } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
+import { translateError, vi } from "../../i18n/vi";
 
 export interface LoanReminderOverrideFormProps {
   value?: ReminderOverride;
@@ -50,7 +51,7 @@ export function LoanReminderOverrideForm({ value, onSave }: LoanReminderOverride
       setError("");
       await onSave(nextValue);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save loan reminders");
+      setError(translateError(cause, vi.errors.genericReminderSave));
     } finally {
       setIsSaving(false);
     }
@@ -62,7 +63,7 @@ export function LoanReminderOverrideForm({ value, onSave }: LoanReminderOverride
     try {
       await onSave(undefined);
     } catch {
-      setError("Could not clear loan reminder override");
+      setError(translateError("Could not clear loan reminder override", vi.errors.genericReminderSave));
     } finally {
       setIsSaving(false);
     }
@@ -72,20 +73,20 @@ export function LoanReminderOverrideForm({ value, onSave }: LoanReminderOverride
     <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <label className="check-field">
         <input type="checkbox" checked={useOverride} onChange={(event) => setUseOverride(event.target.checked)} />
-        Use loan reminder override
+        {vi.reminder.useOverride}
       </label>
       {useOverride ? <div className="reminder-fields">
         <label className="check-field">
           <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          Enable loan reminders
+          {vi.reminder.enabled}
         </label>
-        <Field label="Loan reminder offset (days)" inputMode="numeric" value={offsetDays} onChange={(event) => setOffsetDays(event.target.value)} />
-        <Field label="Loan reminder time" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
+        <Field label={vi.reminder.offsetDays} inputMode="numeric" value={offsetDays} onChange={(event) => setOffsetDays(event.target.value)} />
+        <Field label={vi.reminder.time} type="time" value={time} onChange={(event) => setTime(event.target.value)} />
       </div> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <div className="button-row">
-        <Button icon={<Save aria-hidden="true" size={16} />} variant="primary" disabled={isSaving} type="submit">Save loan reminders</Button>
-        {value ? <Button icon={<Trash2 aria-hidden="true" size={16} />} variant="danger" disabled={isSaving} onClick={() => void clear()}>Clear loan override</Button> : null}
+        <Button icon={<Save aria-hidden="true" size={16} />} variant="primary" disabled={isSaving} type="submit">{vi.reminder.saveLoan}</Button>
+        {value ? <Button icon={<Trash2 aria-hidden="true" size={16} />} variant="danger" disabled={isSaving} onClick={() => void clear()}>{vi.reminder.clearLoan}</Button> : null}
       </div>
     </form>
   );

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { ReminderSettings as ReminderSettingsValue } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
+import { translateError, vi } from "../../i18n/vi";
 
 export interface ReminderSettingsProps {
   value: ReminderSettingsValue;
@@ -28,17 +29,17 @@ export function ReminderSettings({ value, onSave }: ReminderSettingsProps) {
   const save = async () => {
     const trimmedOffsetDays = offsetDays.trim();
     if (!trimmedOffsetDays) {
-      setError("Reminder offset must be a non-negative whole number");
+      setError(translateError("Reminder offset must be a non-negative whole number", vi.errors.genericReminderSave));
       return;
     }
 
     const parsedOffsetDays = Number(trimmedOffsetDays);
     if (!Number.isInteger(parsedOffsetDays) || parsedOffsetDays < 0) {
-      setError("Reminder offset must be a non-negative whole number");
+      setError(translateError("Reminder offset must be a non-negative whole number", vi.errors.genericReminderSave));
       return;
     }
     if (!isValidTime(time)) {
-      setError("Reminder time must use HH:MM");
+      setError(translateError("Reminder time must use HH:MM", vi.errors.genericReminderSave));
       return;
     }
 
@@ -46,18 +47,18 @@ export function ReminderSettings({ value, onSave }: ReminderSettingsProps) {
       await onSave({ enabled, offsetDays: parsedOffsetDays, time });
       setError("");
     } catch {
-      setError("Could not save reminder settings");
+      setError(translateError("Could not save reminder settings", vi.errors.genericReminderSave));
     }
   };
 
   return (
     <section className="operation-panel" aria-labelledby="reminder-settings-heading">
-      <h2 id="reminder-settings-heading">Global reminders</h2>
-      <label className="check-field"><input aria-label="Enable global reminders" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Enable global reminders</label>
-      <Field label="Reminder offset (days)" inputMode="numeric" value={offsetDays} onChange={(event) => setOffsetDays(event.target.value)} />
-      <Field label="Reminder time" type="time" value={time} onChange={(event) => setTime(event.target.value)} />
+      <h2 id="reminder-settings-heading">{vi.reminder.global}</h2>
+      <label className="check-field"><input aria-label={vi.reminder.enabled} type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> {vi.reminder.enabled}</label>
+      <Field label={vi.reminder.offsetDays} inputMode="numeric" value={offsetDays} onChange={(event) => setOffsetDays(event.target.value)} />
+      <Field label={vi.reminder.time} type="time" value={time} onChange={(event) => setTime(event.target.value)} />
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <Button icon={<Bell aria-hidden="true" size={18} />} variant="primary" onClick={() => void save()}>Save reminder settings</Button>
+      <Button icon={<Bell aria-hidden="true" size={18} />} variant="primary" onClick={() => void save()}>{vi.reminder.save}</Button>
     </section>
   );
 }

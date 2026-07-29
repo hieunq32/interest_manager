@@ -26,14 +26,14 @@ describe("ScheduleRevisionForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<ScheduleRevisionForm current={current} onSave={onSave} />);
 
-    expect(screen.getByLabelText("Rate (%)")).toHaveValue("2");
-    await user.clear(screen.getByLabelText("Rate (%)"));
-    await user.type(screen.getByLabelText("Rate (%)"), "3");
-    await user.click(screen.getByRole("button", { name: "Save revision" }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/reason/i);
+    expect(screen.getByLabelText("Lãi suất (%)")).toHaveValue("2");
+    await user.clear(screen.getByLabelText("Lãi suất (%)"));
+    await user.type(screen.getByLabelText("Lãi suất (%)"), "3");
+    await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Vui lòng nhập lý do điều chỉnh khi thay đổi lãi suất hoặc đơn vị lãi suất");
 
-    await user.type(screen.getByLabelText("Adjustment reason"), "  New agreement  ");
-    await user.click(screen.getByRole("button", { name: "Save revision" }));
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "  New agreement  ");
+    await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({
       previous: current,
@@ -47,9 +47,9 @@ describe("ScheduleRevisionForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<ScheduleRevisionForm current={current} onSave={onSave} />);
 
-    await user.clear(screen.getByLabelText("Maturity date"));
-    await user.type(screen.getByLabelText("Maturity date"), "2027-01-15");
-    await user.click(screen.getByRole("button", { name: "Save revision" }));
+    await user.clear(screen.getByLabelText("Ngày tất toán"));
+    await user.type(screen.getByLabelText("Ngày tất toán"), "2027-01-15");
+    await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({
@@ -64,14 +64,14 @@ describe("ScheduleRevisionForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<ScheduleRevisionForm current={current} onSave={onSave} />);
 
-    await user.clear(screen.getByLabelText("Principal base (VND)"));
-    await user.click(screen.getByRole("button", { name: "Save revision" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Principal base must be a positive whole number");
+    await user.clear(screen.getByLabelText("Tiền gốc (đ)"));
+    await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Tiền gốc cơ sở phải là số nguyên dương");
 
-    await user.type(screen.getByLabelText("Principal base (VND)"), "10000000");
-    await user.clear(screen.getByLabelText("Rate (%)"));
-    await user.click(screen.getByRole("button", { name: "Save revision" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Rate must be a non-negative number");
+    await user.type(screen.getByLabelText("Tiền gốc (đ)"), "10000000");
+    await user.clear(screen.getByLabelText("Lãi suất (%)"));
+    await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Lãi suất phải là số không âm");
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -80,10 +80,10 @@ describe("ScheduleRevisionForm", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<ScheduleRevisionForm current={{ ...current, rateValue: 0.03 }} onSave={onSave} />);
 
-    await user.clear(screen.getByLabelText("Rate (%)"));
-    await user.type(screen.getByLabelText("Rate (%)"), "2");
-    await user.type(screen.getByLabelText("Adjustment reason"), "Agreed reduction");
-    await user.click(screen.getByRole("button", { name: "Save revision" }));
+    await user.clear(screen.getByLabelText("Lãi suất (%)"));
+    await user.type(screen.getByLabelText("Lãi suất (%)"), "2");
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Agreed reduction");
+    await user.click(screen.getByRole("button", { name: "Lưu phiên bản lịch mới" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({

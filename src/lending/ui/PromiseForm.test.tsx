@@ -22,12 +22,12 @@ describe("PromiseForm", () => {
     const user = userEvent.setup();
     render(<PromiseForm loanId="loan-1" scheduleEntryId="entry-1" onSave={vi.fn().mockResolvedValue(undefined)} />);
 
-    await user.click(screen.getByRole("button", { name: "Save promise" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Promised date is required");
+    await user.click(screen.getByRole("button", { name: "Lưu lời hứa trả" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Vui lòng nhập ngày hứa trả");
 
-    await user.type(screen.getByLabelText("Promised date"), "2026-08-12");
-    await user.click(screen.getByRole("button", { name: "Save promise" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Promise note is required");
+    await user.type(screen.getByLabelText("Ngày hứa trả"), "2026-08-12");
+    await user.click(screen.getByRole("button", { name: "Lưu lời hứa trả" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Ghi chú hứa trả là bắt buộc");
   });
 
   it("stores optional promised amounts without reducing the ledger balance", async () => {
@@ -36,11 +36,11 @@ describe("PromiseForm", () => {
     const before = calculateEntryTotals(entry, []);
     render(<PromiseForm loanId="loan-1" scheduleEntryId="entry-1" onSave={onSave} />);
 
-    await user.type(screen.getByLabelText("Promised date"), "2026-08-12");
-    await user.type(screen.getByLabelText("Promised principal (VND)"), "800000");
-    await user.type(screen.getByLabelText("Promised interest (VND)"), "200000");
-    await user.type(screen.getByLabelText("Promise note"), "Will transfer after lunch");
-    await user.click(screen.getByRole("button", { name: "Save promise" }));
+    await user.type(screen.getByLabelText("Ngày hứa trả"), "2026-08-12");
+    await user.type(screen.getByLabelText("Gốc hứa trả (đ)"), "800000");
+    await user.type(screen.getByLabelText("Lãi hứa trả (đ)"), "200000");
+    await user.type(screen.getByLabelText("Ghi chú hứa trả"), "Will transfer after lunch");
+    await user.click(screen.getByRole("button", { name: "Lưu lời hứa trả" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     expect(onSave.mock.calls[0][0]).toMatchObject({

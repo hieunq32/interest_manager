@@ -5,6 +5,7 @@ import { type RevisionInput, validateRevisionReason } from "../domain/revisions"
 import type { CalculationModel, PartialPeriodInterestMode, RateUnit, ScheduleVersion } from "../domain/types";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
+import { translateError, vi } from "../../i18n/vi";
 import { calculationModelLabels, partialPeriodInterestModeLabels, rateUnitLabels } from "./lendingLabels";
 
 export interface ScheduleRevisionFormProps {
@@ -101,7 +102,7 @@ export function ScheduleRevisionForm({ current, onSave }: ScheduleRevisionFormPr
       setError("");
       await onSave(input);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save revision");
+      setError(translateError(cause, vi.errors.genericRevisionSave));
     } finally {
       setIsSaving(false);
     }
@@ -109,32 +110,32 @@ export function ScheduleRevisionForm({ current, onSave }: ScheduleRevisionFormPr
 
   return (
     <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <Field label="Effective date" type="date" value={form.effectiveDate} onChange={(event) => update("effectiveDate", event.target.value)} />
-      <label className="field" htmlFor="revision-calculation-model"><span>Calculation model</span>
+      <Field label="Ngày áp dụng" type="date" value={form.effectiveDate} onChange={(event) => update("effectiveDate", event.target.value)} />
+      <label className="field" htmlFor="revision-calculation-model"><span>{vi.loan.calculationModel}</span>
         <select id="revision-calculation-model" value={form.calculationModel} onChange={(event) => update("calculationModel", event.target.value as CalculationModel)}>
           {Object.entries(calculationModelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <Field label="Principal base (VND)" inputMode="numeric" value={form.principalBase} onChange={(event) => update("principalBase", event.target.value)} />
-      <Field label="Disbursement date" type="date" value={form.disbursementDate} onChange={(event) => update("disbursementDate", event.target.value)} />
-      <Field label="Monthly due day" inputMode="numeric" value={form.monthlyDueDay} onChange={(event) => update("monthlyDueDay", event.target.value)} />
-      <Field label="Maturity date" type="date" value={form.maturityDate} onChange={(event) => update("maturityDate", event.target.value)} />
-      <Field label="Rate (%)" inputMode="decimal" value={form.ratePercent} onChange={(event) => update("ratePercent", event.target.value)} />
-      <label className="field" htmlFor="revision-rate-unit"><span>Rate unit</span>
+      <Field label={vi.loan.principal} inputMode="numeric" value={form.principalBase} onChange={(event) => update("principalBase", event.target.value)} />
+      <Field label={vi.loan.disbursementDate} type="date" value={form.disbursementDate} onChange={(event) => update("disbursementDate", event.target.value)} />
+      <Field label={vi.loan.monthlyDueDay} inputMode="numeric" value={form.monthlyDueDay} onChange={(event) => update("monthlyDueDay", event.target.value)} />
+      <Field label={vi.loan.maturityDate} type="date" value={form.maturityDate} onChange={(event) => update("maturityDate", event.target.value)} />
+      <Field label={vi.loan.rate} inputMode="decimal" value={form.ratePercent} onChange={(event) => update("ratePercent", event.target.value)} />
+      <label className="field" htmlFor="revision-rate-unit"><span>{vi.loan.rateUnit}</span>
         <select id="revision-rate-unit" value={form.rateUnit} onChange={(event) => update("rateUnit", event.target.value as RateUnit)}>
           {Object.entries(rateUnitLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <label className="field" htmlFor="revision-partial-period-interest"><span>Partial-period interest</span>
+      <label className="field" htmlFor="revision-partial-period-interest"><span>{vi.loan.partialPeriod}</span>
         <select id="revision-partial-period-interest" value={form.partialPeriodInterestMode} onChange={(event) => update("partialPeriodInterestMode", event.target.value as PartialPeriodInterestMode)}>
           {Object.entries(partialPeriodInterestModeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <label className="field" htmlFor="adjustment-reason"><span>Adjustment reason</span>
+      <label className="field" htmlFor="adjustment-reason"><span>Lý do điều chỉnh</span>
         <textarea id="adjustment-reason" value={form.adjustmentReason} onChange={(event) => update("adjustmentReason", event.target.value)} />
       </label>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <Button icon={<Save aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} type="submit">Save revision</Button>
+      <Button icon={<Save aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} type="submit">Lưu phiên bản lịch mới</Button>
     </form>
   );
 }
