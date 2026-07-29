@@ -24,3 +24,13 @@ Verification:
 
 - Focused suite: 45/45 tests passed.
 - `npm run typecheck` passed.
+
+## Fix Round 2: Require exact lifecycle history
+
+Restored the App lifecycle-history assertion from `expect.arrayContaining(...)` to exact `toEqual([...])`. The settlement and reopening workflow must now return exactly the expected two events, in order, so duplicate or unexpected lifecycle events fail the test. The stale-form regression remains unchanged.
+
+Verification:
+
+- Focused App suite: 22/22 tests passed.
+- `npm run typecheck` passed.
+- `git diff --check` passed.

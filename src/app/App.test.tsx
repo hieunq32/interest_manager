@@ -736,10 +736,10 @@ describe("App", () => {
     await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([
       expect.not.objectContaining({ settledAt: expect.any(String) }),
     ]);
-    await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual(expect.arrayContaining([
+    await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual([
       expect.objectContaining({ action: "settled", effectiveDate: "2026-07-15" }),
       expect.objectContaining({ action: "reopened", reason: "Payment correction required" }),
-    ]));
+    ]);
   });
 
   it("filters borrower loans from current collection data without changing IndexedDB", async () => {
