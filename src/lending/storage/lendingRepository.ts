@@ -3,12 +3,18 @@ import { IndexedDbRecordStore } from "../../storage/indexedDbRecordStore";
 import type {
   Borrower,
   Loan,
+  LoanLifecycleEvent,
+  PaymentAdjustment,
+  PaymentCancellationMutation,
+  PaymentCorrectionMutation,
   PaymentTransaction,
   PromiseToPay,
   ReminderSettings,
   ScheduleEntry,
   ScheduleVersion,
 } from "../domain/types";
+import { normalizePayment } from "../domain/paymentCorrections";
+import { isDateOnly } from "../domain/dateRules";
 import {
   LENDING_RECORD_TYPES,
   LENDING_REMINDER_SETTINGS_RECORD_ID,
@@ -35,7 +41,13 @@ export interface LendingRepository {
   listScheduleEntries(scheduleVersionId?: string): Promise<ScheduleEntry[]>;
   saveScheduleEntries(values: ScheduleEntry[]): Promise<void>;
   listPayments(loanId?: string): Promise<PaymentTransaction[]>;
+  listPaymentHistory(loanId?: string): Promise<PaymentTransaction[]>;
+  listPaymentAdjustments(loanId?: string): Promise<PaymentAdjustment[]>;
   savePayment(value: PaymentTransaction): Promise<void>;
+  savePaymentCorrection(value: PaymentCorrectionMutation): Promise<void>;
+  savePaymentCancellation(value: PaymentCancellationMutation): Promise<void>;
+  listLoanLifecycleEvents(loanId?: string): Promise<LoanLifecycleEvent[]>;
+  saveLoanLifecycleMutation(value: { loan: Loan; event: LoanLifecycleEvent }): Promise<void>;
   listPromises(loanId?: string): Promise<PromiseToPay[]>;
   savePromise(value: PromiseToPay): Promise<void>;
   getReminderSettings(): Promise<ReminderSettings | undefined>;
@@ -117,16 +129,105 @@ export class IndexedDbLendingRepository implements LendingRepository {
   }
 
   async listPayments(loanId?: string): Promise<PaymentTransaction[]> {
+    const values = await this.listPaymentHistory(loanId);
+    return values.filter((value) => value.status === "active");
+  }
+
+  async listPaymentHistory(loanId?: string): Promise<PaymentTransaction[]> {
     const values = await this.listData(LENDING_RECORD_TYPES.payment);
+    const normalized = values.map(normalizePayment);
+    return loanId === undefined ? normalized : normalized.filter((value) => value.loanId === loanId);
+  }
+
+  async listPaymentAdjustments(loanId?: string): Promise<PaymentAdjustment[]> {
+    const values = await this.listData(LENDING_RECORD_TYPES.paymentAdjustment);
     return loanId === undefined ? values : values.filter((value) => value.loanId === loanId);
   }
 
   async savePayment(value: PaymentTransaction): Promise<void> {
     await this.saveLoanCalendarMutation(
       value.loanId,
-      value.createdAt,
-      toGenericRecord(LENDING_RECORD_TYPES.payment, value),
+      value.updatedAt ?? value.createdAt,
+      [toGenericRecord(LENDING_RECORD_TYPES.payment, value)],
     );
+  }
+
+  async savePaymentCorrection(value: PaymentCorrectionMutation): Promise<void> {
+    await this.saveLoanCalendarMutation(value.original.loanId, value.original.updatedAt ?? value.original.createdAt, [
+      toGenericRecord(LENDING_RECORD_TYPES.payment, value.original),
+      toGenericRecord(LENDING_RECORD_TYPES.payment, value.replacement),
+      toGenericRecord(LENDING_RECORD_TYPES.paymentAdjustment, value.adjustment),
+    ]);
+  }
+
+  async savePaymentCancellation(value: PaymentCancellationMutation): Promise<void> {
+    await this.saveLoanCalendarMutation(value.original.loanId, value.original.updatedAt ?? value.original.createdAt, [
+      toGenericRecord(LENDING_RECORD_TYPES.payment, value.original),
+      toGenericRecord(LENDING_RECORD_TYPES.paymentAdjustment, value.adjustment),
+    ]);
+  }
+
+  async listLoanLifecycleEvents(loanId?: string): Promise<LoanLifecycleEvent[]> {
+    const values = await this.listData(LENDING_RECORD_TYPES.loanLifecycleEvent);
+    return (loanId === undefined ? values : values.filter((value) => value.loanId === loanId))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+  }
+
+  async saveLoanLifecycleMutation(value: { loan: Loan; event: LoanLifecycleEvent }): Promise<void> {
+    if (value.event.loanId !== value.loan.id) {
+      throw new Error("lifecycle event loan ID must match loan ID");
+    }
+    if (
+      (value.event.action === "settled" && value.loan.status !== "settled") ||
+      (value.event.action === "reopened" && value.loan.status !== "active")
+    ) {
+      throw new Error("lifecycle event action must match loan status");
+    }
+    if (value.event.action === "settled") {
+      if (!isDateOnly(value.loan.settledAt ?? "")) {
+        throw new Error("settledAt must be a valid DateOnly");
+      }
+      if (!isDateOnly(value.event.effectiveDate)) {
+        throw new Error("effectiveDate must be a valid DateOnly");
+      }
+      if (value.loan.settledAt !== value.event.effectiveDate) {
+        throw new Error("settledAt must match lifecycle effectiveDate");
+      }
+    } else {
+      if (!isDateOnly(value.event.effectiveDate)) {
+        throw new Error("effectiveDate must be a valid DateOnly");
+      }
+      if (value.event.reason?.trim() === "") {
+        throw new Error("reopen reason is required");
+      }
+      if (!value.event.reason) {
+        throw new Error("reopen reason is required");
+      }
+      if (value.loan.settledAt !== undefined) {
+        throw new Error("reopened loan must not retain settledAt");
+      }
+    }
+
+    const persistedLoan = (await this.listLoans()).find((loan) => loan.id === value.loan.id);
+    if (!persistedLoan) {
+      throw new Error("persisted loan is required for lifecycle mutation");
+    }
+    if (value.event.action === "settled" && persistedLoan.status !== "active") {
+      throw new Error("persisted loan must be active to settle");
+    }
+    if (value.event.action === "reopened" && persistedLoan.status !== "settled") {
+      throw new Error("persisted loan must be settled to reopen");
+    }
+
+    await this.store.upsertRecords([
+      toGenericRecord(
+        LENDING_RECORD_TYPES.loan,
+        value.event.action === "settled"
+          ? invalidateCalendarExport(value.loan, value.loan.updatedAt)
+          : value.loan,
+      ),
+      toGenericRecord(LENDING_RECORD_TYPES.loanLifecycleEvent, value.event),
+    ]);
   }
 
   async listPromises(loanId?: string): Promise<PromiseToPay[]> {
@@ -138,7 +239,7 @@ export class IndexedDbLendingRepository implements LendingRepository {
     await this.saveLoanCalendarMutation(
       value.loanId,
       value.updatedAt,
-      toGenericRecord(LENDING_RECORD_TYPES.promise, value),
+      [toGenericRecord(LENDING_RECORD_TYPES.promise, value)],
     );
   }
 
@@ -188,10 +289,10 @@ export class IndexedDbLendingRepository implements LendingRepository {
   private async saveLoanCalendarMutation(
     loanId: string,
     updatedAt: string,
-    mutationRecord: GenericRecord,
+    mutationRecords: GenericRecord[],
   ): Promise<void> {
     const loan = (await this.listLoans()).find((candidate) => candidate.id === loanId);
-    const records = [mutationRecord];
+    const records = [...mutationRecords];
     if (loan?.calendarExportVersionId !== undefined) {
       records.push(toGenericRecord(
         LENDING_RECORD_TYPES.loan,

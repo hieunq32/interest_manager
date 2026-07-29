@@ -129,6 +129,48 @@ describe("ledger totals", () => {
       outstandingInterest: 25,
     });
   });
+
+  it("excludes an adjusted payment while retaining its active replacement", () => {
+    expect(
+      calculateEntryTotals(entry(), [
+        payment({ id: "original", principalAmount: 1_000, interestAmount: 100, status: "adjusted" }),
+        payment({ id: "replacement", principalAmount: 700, interestAmount: 70, status: "active" }),
+      ]),
+    ).toEqual({
+      receivedPrincipal: 700,
+      receivedInterest: 70,
+      outstandingPrincipal: 300,
+      outstandingInterest: 30,
+    });
+  });
+
+  it("excludes voided payments while treating legacy payments as active", () => {
+    expect(
+      calculateEntryTotals(entry(), [
+        payment({ id: "voided", principalAmount: 1_000, interestAmount: 100, status: "voided" }),
+        payment({ id: "legacy", principalAmount: 400, interestAmount: 40 }),
+      ]),
+    ).toEqual({
+      receivedPrincipal: 400,
+      receivedInterest: 40,
+      outstandingPrincipal: 600,
+      outstandingInterest: 60,
+    });
+  });
+
+  it("excludes adjusted and voided payments from entry totals", () => {
+    expect(
+      calculateEntryTotals(entry(), [
+        payment({ id: "adjusted", principalAmount: 1_000, interestAmount: 100, status: "adjusted" }),
+        payment({ id: "voided", principalAmount: 1_000, interestAmount: 100, status: "voided" }),
+      ]),
+    ).toEqual({
+      receivedPrincipal: 0,
+      receivedInterest: 0,
+      outstandingPrincipal: 1_000,
+      outstandingInterest: 100,
+    });
+  });
 });
 
 describe("entry status", () => {

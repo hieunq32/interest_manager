@@ -3,7 +3,7 @@ export const vi = {
   navigation: { home: "Trang chủ", settings: "Cài đặt" },
   common: {
     save: "Lưu", cancel: "Hủy", back: "Quay lại", note: "Ghi chú", actions: "Thao tác", status: "Trạng thái",
-    to: "đến", none: "Không có", unassigned: "Chưa phân bổ", primaryNavigation: "Điều hướng chính", systemStatus: "Trạng thái hệ thống",
+    to: "đến", none: "Không có", all: "Tất cả", unassigned: "Chưa phân bổ", primaryNavigation: "Điều hướng chính", systemStatus: "Trạng thái hệ thống",
   },
   shellStatus: {
     online: "Đang online",
@@ -20,7 +20,11 @@ export const vi = {
       "Borrower saved": "Đã lưu người vay",
       "Borrower archived": "Đã lưu trữ người vay",
       "Loan saved": "Đã lưu khoản vay",
+      "Loan settled": "Đã tất toán khoản vay",
+      "Loan reopened": "Đã mở lại khoản vay",
       "Payment recorded": "Đã ghi nhận khoản thu",
+      "Payment corrected": "Đã điều chỉnh giao dịch",
+      "Payment cancelled": "Đã hủy giao dịch",
       "Promise recorded": "Đã ghi nhận lời hứa trả",
       "Promise fulfilled": "Đã đánh dấu lời hứa đã thực hiện",
       "Promise cancelled": "Đã hủy lời hứa trả",
@@ -54,6 +58,7 @@ export const vi = {
     archive: "Lưu trữ người vay", displayName: "Tên hiển thị", phone: "Số điện thoại",
     note: "Ghi chú", loans: "Các khoản vay", noBorrowers: "Chưa có người vay nào.",
     noLoans: "Người vay này chưa có khoản vay nào.", notFound: "Không tìm thấy người vay",
+    searchBorrower: "Tìm người vay", borrowerStatusFilter: "Trạng thái người vay", noSearchResults: "Không tìm thấy kết quả phù hợp.",
   },
   loan: {
     title: "Khoản vay", new: "Thêm khoản vay", details: "Chi tiết khoản vay", notFound: "Không tìm thấy khoản vay",
@@ -63,11 +68,15 @@ export const vi = {
     preview: "Xem trước lịch thu", previewDueDate: "Ngày đến hạn", previewPrincipal: "Gốc", previewInterest: "Lãi", interest: "Lãi", confirmSave: "Xác nhận và lưu khoản vay", currentBalance: "Dư nợ hiện tại",
     outstandingPrincipal: "Gốc còn phải thu", outstandingInterest: "Lãi còn phải thu", nextDueDate: "Ngày thu tiếp theo",
     versions: "Các phiên bản lịch thu", active: "đang áp dụng", readOnly: "chỉ xem", originalDue: "Ngày đến hạn gốc",
+    loanStatusFilter: "Trạng thái khoản vay", collectionStatusFilter: "Trạng thái thu tiền",
+    settlement: "Tất toán khoản vay", settlementDate: "Ngày tất toán", eligibleForSettlement: "Đủ điều kiện tất toán", ineligibleForSettlement: "Chưa đủ điều kiện tất toán", remainingBalance: "Số tiền còn thiếu", confirmSettlement: "Xác nhận tất toán", settledDate: "Ngày tất toán", reopen: "Mở lại khoản vay", reopenReason: "Lý do mở lại khoản vay", confirmReopen: "Xác nhận mở lại", lifecycleHistory: "Lịch sử vòng đời", noLifecycleEvents: "Chưa có lịch sử vòng đời", settled: "Đã tất toán", reopened: "Đã mở lại",
   },
   payment: {
     record: "Ghi nhận khoản thu", history: "Lịch sử thu tiền", receivedDate: "Ngày thu",
     principalReceived: "Gốc đã thu (đ)", interestReceived: "Lãi đã thu (đ)", scheduleEntry: "Kỳ thu",
     save: "Lưu khoản thu", noPayments: "Chưa có khoản thu nào.", received: "Đã thu", expected: "Dự kiến", outstanding: "Còn phải thu",
+    edit: "Sửa giao dịch", void: "Hủy giao dịch", correctionReason: "Lý do điều chỉnh", saveCorrection: "Lưu điều chỉnh", confirmVoid: "Xác nhận hủy giao dịch",
+    adjustmentHistory: "Lịch sử điều chỉnh", before: "Trước điều chỉnh", after: "Sau điều chỉnh", adjustmentTime: "Thời gian điều chỉnh",
   },
   promise: {
     record: "Ghi nhận lời hứa trả", history: "Lịch sử hứa trả", promisedDate: "Ngày hứa trả",
@@ -98,13 +107,14 @@ export const vi = {
     genericPromiseSave: "Không thể lưu lời hứa trả", genericReminderSave: "Không thể lưu cài đặt nhắc hạn",
     genericRevisionSave: "Không thể lưu phiên bản lịch", previewFailed: "Không thể xem trước lịch thu",
     requiredDate: "Vui lòng nhập ngày bắt buộc", positiveAmount: "Số tiền phải lớn hơn 0",
+    invalidReceivedDate: "Vui lòng nhập ngày thu hợp lệ", invalidSettlementDate: "Vui lòng nhập ngày tất toán hợp lệ",
     requiredPromiseNote: "Ghi chú hứa trả là bắt buộc", requiredReason: "Vui lòng nhập lý do điều chỉnh",
     requiredLoanDates: "Vui lòng nhập ngày giải ngân và ngày tất toán", requiredRevisionDates: "Vui lòng nhập ngày áp dụng, ngày giải ngân và ngày tất toán",
     maturityAfterDisbursement: "Ngày tất toán phải sau ngày giải ngân", effectiveBeforeMaturity: "Ngày áp dụng phải trước ngày tất toán",
     nonNegativeRate: "Lãi suất phải là số không âm", adjustmentReasonRequired: "Vui lòng nhập lý do điều chỉnh khi thay đổi lãi suất hoặc đơn vị lãi suất",
     invalidReminderOffset: "Số ngày nhắc trước phải là số nguyên không âm", invalidReminderTime: "Giờ nhắc phải có dạng HH:MM",
     backupPassphraseRequired: "Vui lòng nhập mật khẩu sao lưu", restorePassphraseRequired: "Vui lòng nhập mật khẩu khôi phục",
-    calendarPreparationFailed: "Không thể chuẩn bị lịch Calendar.", unknown: "Đã xảy ra lỗi. Vui lòng thử lại.",
+    calendarPreparationFailed: "Không thể chuẩn bị lịch Calendar.", reopenReasonRequired: "Vui lòng nhập lý do mở lại khoản vay", unknown: "Đã xảy ra lỗi. Vui lòng thử lại.",
   },
 } as const;
 
@@ -118,6 +128,7 @@ const exactErrorTranslations: Record<string, string> = {
   "Could not save revision": vi.errors.genericRevisionSave,
   "Could not preview schedule": vi.errors.previewFailed,
   "Received date is required": "Vui lòng nhập ngày thu",
+  "receivedAt must be a valid DateOnly": vi.errors.invalidReceivedDate,
   "Promised date is required": "Vui lòng nhập ngày hứa trả",
   "Promise note is required": vi.errors.requiredPromiseNote,
   "At least one received amount must be positive": vi.errors.positiveAmount,

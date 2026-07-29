@@ -6,9 +6,12 @@ import {
   calculateLoanSummary,
   selectCurrentLoanEntries,
 } from "../lending/domain/ledger";
+import { reopenLoan, settleLoan } from "../lending/domain/loanLifecycle";
+import { filterLoans, getLoanCollectionStatus, type LoanCollectionContext } from "../lending/domain/loanSelectors";
+import { buildPaymentCancellation, buildPaymentCorrection, normalizePayment } from "../lending/domain/paymentCorrections";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
-import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
+import type { Borrower, Loan, LoanLifecycleEvent, PaymentAdjustment, PaymentSnapshot, PaymentTransaction, PromiseToPay, ReminderOverride, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import { buildIcsCalendar, buildScheduleCalendarEvents } from "../lending/reminders/ical";
 import { DEFAULT_REMINDER_SETTINGS, resolveReminderSettings } from "../lending/reminders/reminderSettings";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
@@ -127,6 +130,9 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   const [scheduleVersions, setScheduleVersions] = useState<ScheduleVersion[]>([]);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleEntry[]>([]);
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentTransaction[]>([]);
+  const [paymentAdjustments, setPaymentAdjustments] = useState<PaymentAdjustment[]>([]);
+  const [lifecycleEvents, setLifecycleEvents] = useState<LoanLifecycleEvent[]>([]);
   const [promises, setPromises] = useState<PromiseToPay[]>([]);
   const [reminderSettings, setReminderSettings] = useState(DEFAULT_REMINDER_SETTINGS);
   const [mode, setMode] = useState<"none" | "create-borrower" | "edit-borrower" | "create-loan">("none");
@@ -139,12 +145,15 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   }, [store]);
 
   const refreshLendingData = useCallback(async () => {
-    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPromises, nextReminderSettings] = await Promise.all([
+    const [nextBorrowers, nextLoans, nextVersions, nextEntries, nextPayments, nextPaymentHistory, nextPaymentAdjustments, nextLifecycleEvents, nextPromises, nextReminderSettings] = await Promise.all([
       repository.listBorrowers(),
       repository.listLoans(),
       repository.listScheduleVersions(),
       repository.listScheduleEntries(),
       repository.listPayments(),
+      repository.listPaymentHistory(),
+      repository.listPaymentAdjustments(),
+      repository.listLoanLifecycleEvents(),
       repository.listPromises(),
       repository.getReminderSettings(),
     ]);
@@ -153,6 +162,9 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     setScheduleVersions(nextVersions);
     setScheduleEntries(nextEntries);
     setPayments(nextPayments);
+    setPaymentHistory(nextPaymentHistory);
+    setPaymentAdjustments(nextPaymentAdjustments);
+    setLifecycleEvents(nextLifecycleEvents);
     setPromises(nextPromises);
     setReminderSettings(nextReminderSettings ?? DEFAULT_REMINDER_SETTINGS);
   }, [repository]);
@@ -257,6 +269,69 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     await repository.savePayment(value);
     await Promise.all([refreshHealth(), refreshLendingData()]);
     setMessage("Payment recorded");
+  };
+
+  const editPayment = async (payment: PaymentTransaction, next: PaymentSnapshot, reason: string) => {
+    const now = new Date().toISOString();
+    await repository.savePaymentCorrection(buildPaymentCorrection({
+      payment,
+      next,
+      reason,
+      adjustmentId: crypto.randomUUID(),
+      replacementId: crypto.randomUUID(),
+      now,
+    }));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Payment corrected");
+  };
+
+  const cancelPayment = async (payment: PaymentTransaction, reason: string) => {
+    const now = new Date().toISOString();
+    await repository.savePaymentCancellation(buildPaymentCancellation({
+      payment,
+      reason,
+      adjustmentId: crypto.randomUUID(),
+      now,
+    }));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Payment cancelled");
+  };
+
+  const settleLoanFor = async (loanToSettle: Loan, settlementDate: string) => {
+    const now = new Date().toISOString();
+    const mutation = settleLoan({
+      loan: loanToSettle,
+      summary: calculateLoanSummary({
+        loanId: loanToSettle.id,
+        entries: selectCurrentLoanEntries({
+          entries: scheduleEntries,
+          versions: scheduleVersions.filter((version) => version.loanId === loanToSettle.id),
+          activeScheduleVersionId: loanToSettle.defaultScheduleVersionId,
+        }),
+        payments: payments.filter((payment) => payment.loanId === loanToSettle.id),
+        promises: promises.filter((promise) => promise.loanId === loanToSettle.id),
+        today: todayInVietnam(),
+      }),
+      settlementDate,
+      eventId: crypto.randomUUID(),
+      now,
+    });
+    await repository.saveLoanLifecycleMutation(mutation);
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Loan settled");
+  };
+
+  const reopenLoanFor = async (loanToReopen: Loan, reason: string) => {
+    const now = new Date().toISOString();
+    await repository.saveLoanLifecycleMutation(reopenLoan({
+      loan: loanToReopen,
+      reason,
+      eventId: crypto.randomUUID(),
+      effectiveDate: todayInVietnam(),
+      now,
+    }));
+    await Promise.all([refreshHealth(), refreshLendingData()]);
+    setMessage("Loan reopened");
   };
 
   const savePromise = async (value: PromiseToPay) => {
@@ -428,6 +503,22 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       today: todayInVietnam(),
     }));
 
+  const loanCollectionContexts = useMemo<LoanCollectionContext[]>(() => loans.map((loan) => ({
+    loan,
+    entries: selectCurrentLoanEntries({
+      entries: scheduleEntries,
+      versions: scheduleVersions.filter((version) => version.loanId === loan.id),
+      activeScheduleVersionId: loan.defaultScheduleVersionId,
+    }),
+    payments: payments.filter((payment) => payment.loanId === loan.id && normalizePayment(payment).status === "active"),
+    promises: promises.filter((promise) => promise.loanId === loan.id),
+    today: todayInVietnam(),
+  })), [loans, payments, promises, scheduleEntries, scheduleVersions]);
+  const collectionStatuses = useMemo(
+    () => Object.fromEntries(loanCollectionContexts.map((context) => [context.loan.id, getLoanCollectionStatus(context)])),
+    [loanCollectionContexts],
+  );
+
   const routeContent = (() => {
     if (route.name === "settings") {
       return (
@@ -461,7 +552,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       if (mode === "create-loan") {
         return <LoanForm borrowerId={borrower.id} onSave={saveLoan} onCancel={() => setMode("none")} />;
       }
-      return <BorrowerDetail borrower={borrower} loans={loans.filter((candidate) => candidate.borrowerId === borrower.id)} onBack={() => navigate({ name: "dashboard" })} onEdit={() => setMode("edit-borrower")} onCreateLoan={() => setMode("create-loan")} onSelectLoan={(loanId) => navigate({ name: "loan", loanId })} />;
+      return <BorrowerDetail borrower={borrower} loans={filterLoans({ contexts: loanCollectionContexts, filter: { borrowerId: borrower.id } })} collectionStatuses={collectionStatuses} onBack={() => navigate({ name: "dashboard" })} onEdit={() => setMode("edit-borrower")} onCreateLoan={() => setMode("create-loan")} onSelectLoan={(loanId) => navigate({ name: "loan", loanId })} />;
     }
     if (route.name === "loan") {
       if (!loan) {
@@ -476,15 +567,22 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         versions={loanVersions}
         entries={scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId))}
         payments={payments.filter((payment) => payment.loanId === loan.id)}
+        paymentHistory={paymentHistory.filter((payment) => payment.loanId === loan.id)}
+        paymentAdjustments={paymentAdjustments.filter((adjustment) => adjustment.loanId === loan.id)}
         promises={promises.filter((promise) => promise.loanId === loan.id)}
+        lifecycleEvents={lifecycleEvents.filter((event) => event.loanId === loan.id)}
         today={todayInVietnam()}
         calendarExportVersionId={loan.calendarExportVersionId}
         onBack={() => navigate({ name: "borrower", borrowerId: loan.borrowerId })}
         onSavePayment={savePayment}
+        onEditPayment={editPayment}
+        onCancelPayment={cancelPayment}
         onSavePromise={savePromise}
         onUpdatePromise={updatePromise}
         onSaveRevision={(input) => saveRevision(loan, input)}
         onSaveReminderOverride={(value) => saveLoanReminderOverride(loan, value)}
+        onSettle={(settlementDate) => settleLoanFor(loan, settlementDate)}
+        onReopen={(reason) => reopenLoanFor(loan, reason)}
         onExportCalendar={() => void prepareCalendarExport({
           loan,
           borrowerName: loanBorrower?.displayName ?? vi.borrower.unknown,

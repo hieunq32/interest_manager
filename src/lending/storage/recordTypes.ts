@@ -2,6 +2,8 @@ import type { GenericRecord } from "../../backup/types";
 import type {
   Borrower,
   Loan,
+  LoanLifecycleEvent,
+  PaymentAdjustment,
   PaymentTransaction,
   PromiseToPay,
   ReminderSettings,
@@ -15,6 +17,8 @@ export const LENDING_RECORD_TYPES = {
   scheduleVersion: "lending.schedule-version",
   scheduleEntry: "lending.schedule-entry",
   payment: "lending.payment",
+  paymentAdjustment: "lending.payment-adjustment",
+  loanLifecycleEvent: "lending.loan-lifecycle-event",
   promise: "lending.promise",
   reminderSettings: "lending.reminder-settings",
 } as const;
@@ -29,6 +33,8 @@ export type LendingRecordData = {
   [LENDING_RECORD_TYPES.scheduleVersion]: ScheduleVersion;
   [LENDING_RECORD_TYPES.scheduleEntry]: ScheduleEntry;
   [LENDING_RECORD_TYPES.payment]: PaymentTransaction;
+  [LENDING_RECORD_TYPES.paymentAdjustment]: PaymentAdjustment;
+  [LENDING_RECORD_TYPES.loanLifecycleEvent]: LoanLifecycleEvent;
   [LENDING_RECORD_TYPES.promise]: PromiseToPay;
   [LENDING_RECORD_TYPES.reminderSettings]: ReminderSettings;
 };

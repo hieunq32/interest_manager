@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type {
   Borrower,
   Loan,
+  LoanLifecycleEvent,
+  PaymentAdjustment,
   PaymentTransaction,
   PromiseToPay,
   ReminderSettings,
@@ -77,7 +79,29 @@ describe("backup service", () => {
     await target.replaceAllDomainRecords(restored.records);
 
     await expect(target.listAllDomainRecords()).resolves.toEqual(domainRecords);
-    expect(domainRecords.map((record) => record.type).sort()).toEqual(Object.values(LENDING_RECORD_TYPES).sort());
+    expect(new Set(domainRecords.map((record) => record.type))).toEqual(new Set(Object.values(LENDING_RECORD_TYPES)));
+  });
+
+  it("restores encrypted adjusted, voided, settled, and reopened audit history", async () => {
+    const source = createLendingRepository();
+    const domainRecords = await saveLendingHistory(source);
+    const expectedBorrowers = await source.listBorrowers();
+    const expectedLoans = await source.listLoans();
+    const expectedPaymentHistory = await source.listPaymentHistory();
+    const expectedAdjustments = await source.listPaymentAdjustments();
+    const expectedLifecycleEvents = await source.listLoanLifecycleEvents();
+    const backup = await createEncryptedBackup(domainRecords, "safe passphrase", { iterations: 1000 });
+    const target = createLendingRepository();
+
+    expect(backup.payload.data).not.toContain("Replacement rejected");
+    const restored = await restoreEncryptedBackup(backup, "safe passphrase");
+    await target.replaceAllDomainRecords(restored.records);
+
+    await expect(target.listBorrowers()).resolves.toEqual(expectedBorrowers);
+    await expect(target.listLoans()).resolves.toEqual(expectedLoans);
+    await expect(target.listPaymentHistory()).resolves.toEqual(expectedPaymentHistory);
+    await expect(target.listPaymentAdjustments()).resolves.toEqual(expectedAdjustments);
+    await expect(target.listLoanLifecycleEvents()).resolves.toEqual(expectedLifecycleEvents);
   });
 });
 
@@ -148,6 +172,76 @@ async function saveLendingHistory(repository: IndexedDbLendingRepository): Promi
     principalAmount: 1_000_000,
     interestAmount: 200_000,
     createdAt,
+    status: "adjusted",
+    updatedAt,
+  };
+  const replacementPayment: PaymentTransaction = {
+    ...payment,
+    id: "payment-2",
+    principalAmount: 900_000,
+    status: "voided",
+    createdAt: updatedAt,
+    updatedAt: "2026-07-28T02:00:00.000Z",
+  };
+  const paymentAdjustment: PaymentAdjustment = {
+    id: "payment-adjustment-1",
+    loanId: loan.id,
+    paymentId: payment.id,
+    replacementPaymentId: replacementPayment.id,
+    action: "edit",
+    reason: "Correct principal amount",
+    before: {
+      scheduleEntryId: entry.id,
+      receivedAt: payment.receivedAt,
+      principalAmount: 1_000_000,
+      interestAmount: 200_000,
+    },
+    after: {
+      scheduleEntryId: entry.id,
+      receivedAt: replacementPayment.receivedAt,
+      principalAmount: replacementPayment.principalAmount,
+      interestAmount: replacementPayment.interestAmount,
+    },
+    createdAt: updatedAt,
+  };
+  const lifecycleEvent: LoanLifecycleEvent = {
+    id: "loan-lifecycle-event-1",
+    loanId: loan.id,
+    action: "settled",
+    effectiveDate: "2026-07-28",
+    reason: "Balance cleared",
+    createdAt: updatedAt,
+  };
+  const voidAdjustment: PaymentAdjustment = {
+    id: "payment-adjustment-2",
+    loanId: loan.id,
+    paymentId: replacementPayment.id,
+    action: "void",
+    reason: "Replacement rejected",
+    before: {
+      scheduleEntryId: entry.id,
+      receivedAt: replacementPayment.receivedAt,
+      principalAmount: replacementPayment.principalAmount,
+      interestAmount: replacementPayment.interestAmount,
+    },
+    createdAt: replacementPayment.updatedAt!,
+  };
+  const finalPayment: PaymentTransaction = {
+    ...payment,
+    id: "payment-3",
+    principalAmount: entry.expectedPrincipal,
+    interestAmount: entry.expectedInterest,
+    status: "active",
+    createdAt: "2026-07-28T03:00:00.000Z",
+    updatedAt: "2026-07-28T03:00:00.000Z",
+  };
+  const reopenEvent: LoanLifecycleEvent = {
+    id: "loan-lifecycle-event-2",
+    loanId: loan.id,
+    action: "reopened",
+    effectiveDate: "2026-07-29",
+    reason: "Correction needs another review",
+    createdAt: "2026-07-29T01:00:00.000Z",
   };
   const promise: PromiseToPay = {
     id: "promise-1",
@@ -169,9 +263,33 @@ async function saveLendingHistory(repository: IndexedDbLendingRepository): Promi
   await repository.saveLoan(loan);
   await repository.saveScheduleVersion(version);
   await repository.saveScheduleEntries([entry]);
-  await repository.savePayment(payment);
+  await repository.savePaymentCorrection({
+    original: payment,
+    replacement: { ...replacementPayment, status: "active", updatedAt },
+    adjustment: paymentAdjustment,
+  });
+  await repository.savePaymentCancellation({ original: replacementPayment, adjustment: voidAdjustment });
+  await repository.savePayment(finalPayment);
+  await repository.saveLoanLifecycleMutation({
+    loan: { ...loan, status: "settled", settledAt: lifecycleEvent.effectiveDate, updatedAt },
+    event: lifecycleEvent,
+  });
+  await repository.saveLoanLifecycleMutation({
+    loan: { ...loan, status: "active", updatedAt: reopenEvent.createdAt },
+    event: reopenEvent,
+  });
   await repository.savePromise(promise);
   await repository.saveReminderSettings(settings);
 
-  return repository.listAllDomainRecords();
+  const domainRecords = await repository.listAllDomainRecords();
+  expect(domainRecords).toEqual(expect.arrayContaining([
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.payment, data: payment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.payment, data: replacementPayment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.payment, data: finalPayment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.paymentAdjustment, data: paymentAdjustment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.paymentAdjustment, data: voidAdjustment }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.loanLifecycleEvent, data: lifecycleEvent }),
+    expect.objectContaining({ type: LENDING_RECORD_TYPES.loanLifecycleEvent, data: reopenEvent }),
+  ]));
+  return domainRecords;
 }
