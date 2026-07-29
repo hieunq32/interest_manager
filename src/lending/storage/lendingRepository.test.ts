@@ -356,6 +356,36 @@ describe("IndexedDbLendingRepository", () => {
     await expect(repository.listLoanLifecycleEvents(loan.id)).resolves.toEqual([event]);
   });
 
+  it("lists lifecycle history chronologically instead of by random record ID", async () => {
+    const repository = createRepository();
+    const settledEvent: LoanLifecycleEvent = {
+      id: "z-settlement",
+      loanId: loan.id,
+      action: "settled",
+      effectiveDate: "2026-07-15",
+      createdAt: "2026-07-15T08:00:00.000Z",
+    };
+    const reopenedEvent: LoanLifecycleEvent = {
+      id: "a-reopening",
+      loanId: loan.id,
+      action: "reopened",
+      effectiveDate: "2026-07-16",
+      reason: "Correction required",
+      createdAt: "2026-07-16T08:00:00.000Z",
+    };
+
+    await repository.saveLoanLifecycleMutation({
+      loan: { ...loan, status: "settled", settledAt: settledEvent.effectiveDate, updatedAt: settledEvent.createdAt },
+      event: settledEvent,
+    });
+    await repository.saveLoanLifecycleMutation({
+      loan: { ...loan, status: "active", updatedAt: reopenedEvent.createdAt },
+      event: reopenedEvent,
+    });
+
+    await expect(repository.listLoanLifecycleEvents(loan.id)).resolves.toEqual([settledEvent, reopenedEvent]);
+  });
+
   it("rejects a lifecycle event that belongs to another loan", async () => {
     const repository = createRepository();
     const settledLoan: Loan = { ...loan, status: "settled", settledAt: "2026-07-28", updatedAt: "2026-07-28T02:00:00.000Z" };

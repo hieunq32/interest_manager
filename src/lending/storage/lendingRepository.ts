@@ -168,7 +168,8 @@ export class IndexedDbLendingRepository implements LendingRepository {
 
   async listLoanLifecycleEvents(loanId?: string): Promise<LoanLifecycleEvent[]> {
     const values = await this.listData(LENDING_RECORD_TYPES.loanLifecycleEvent);
-    return loanId === undefined ? values : values.filter((value) => value.loanId === loanId);
+    return (loanId === undefined ? values : values.filter((value) => value.loanId === loanId))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
   }
 
   async saveLoanLifecycleMutation(value: { loan: Loan; event: LoanLifecycleEvent }): Promise<void> {

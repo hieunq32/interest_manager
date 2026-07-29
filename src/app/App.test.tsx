@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createEncryptedBackup } from "../backup/backupService";
-import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ReminderSettings, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
+import type { Borrower, Loan, LoanLifecycleEvent, PaymentAdjustment, PaymentTransaction, PromiseToPay, ReminderSettings, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
 import type { GenericRecord } from "../backup/types";
 import { IndexedDbLendingRepository } from "../lending/storage/lendingRepository";
 import { IndexedDbRecordStore } from "../storage/indexedDbRecordStore";
@@ -285,6 +285,84 @@ describe("App", () => {
     await expect(store.listRecordsByType("system.smoke")).resolves.toEqual([expect.objectContaining({ data: { origin: "after-export" } })]);
     createElement.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  it("recovers adjusted, voided, and reopened loan history from an encrypted UI backup", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const store = new IndexedDbRecordStore(dbName);
+    const repository = new IndexedDbLendingRepository(store);
+    const history = await saveAuditedLendingHistory(repository);
+    const originalCreateElement = document.createElement.bind(document);
+    let backupBlob: Blob | undefined;
+    const createElement = vi.spyOn(document, "createElement").mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+      const element = originalCreateElement(tagName, options);
+      if (tagName === "a") {
+        vi.spyOn(element, "click").mockImplementation(() => undefined);
+      }
+      return element;
+    }) as typeof document.createElement);
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn((blob: Blob) => {
+        backupBlob = blob;
+        return "blob:backup";
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.stubGlobal("confirm", confirm);
+
+    try {
+      window.location.hash = "#/settings";
+      render(<App dbName={dbName} />);
+      await screen.findByRole("heading", { name: "Sao lưu" });
+      await user.type(screen.getByLabelText("Mật khẩu sao lưu"), "safe passphrase");
+      await user.click(screen.getByRole("button", { name: "Sao lưu" }));
+      await waitFor(() => expect(backupBlob).toBeDefined());
+      const backupText = await backupBlob!.text();
+      expect(backupText).not.toContain(history.editAdjustment.reason);
+      expect(backupText).not.toContain(history.reopenEvent.reason);
+      const backupFile = new File([backupText], "backup.json", { type: "application/json" });
+
+      await user.click(screen.getByRole("button", { name: "Xóa dữ liệu cho vay" }));
+      await waitFor(() => expect(confirm).toHaveBeenNthCalledWith(1, "Xóa toàn bộ dữ liệu cho vay cục bộ?"));
+      await expect(repository.listAllDomainRecords()).resolves.toEqual([]);
+
+      await user.type(screen.getByLabelText("Mật khẩu khôi phục"), "safe passphrase");
+      await user.upload(screen.getByLabelText("Tệp sao lưu"), backupFile);
+      await waitFor(() => expect(confirm).toHaveBeenNthCalledWith(2, "Thay thế các bản ghi cục bộ bằng bản sao lưu này?"));
+      await expect(repository.listBorrowers()).resolves.toEqual([history.borrower]);
+      await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([history.loan]);
+      await expect(repository.listPaymentHistory(history.loan.id)).resolves.toEqual([
+        history.finalPayment,
+        history.originalPayment,
+        history.replacementPayment,
+      ]);
+      await expect(repository.listPaymentAdjustments(history.loan.id)).resolves.toEqual([
+        history.editAdjustment,
+        history.voidAdjustment,
+      ]);
+      await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual([
+        history.settlementEvent,
+        history.reopenEvent,
+      ]);
+
+      act(() => {
+        window.location.hash = `#/loans/${history.loan.id}`;
+        window.dispatchEvent(new Event("hashchange"));
+      });
+      await screen.findByRole("heading", { name: "Chi tiết khoản vay" });
+      for (const historyEntry of screen.getAllByText("Lịch sử điều chỉnh")) {
+        await user.click(historyEntry);
+      }
+      expect(screen.getByText(history.editAdjustment.reason)).toBeInTheDocument();
+      expect(screen.getByText(history.voidAdjustment.reason)).toBeInTheDocument();
+      expect(screen.getByText("Đã tất toán: 2026-07-15")).toBeInTheDocument();
+      expect(screen.getByText("Đã mở lại: 2026-07-16 - Correction needs another review")).toBeInTheDocument();
+    } finally {
+      createElement.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("loads borrower records after a hash-route reload", async () => {
@@ -742,6 +820,80 @@ describe("App", () => {
     ]);
   });
 
+  it("preserves correction, cancellation, settlement, and reopening state across App reloads", async () => {
+    const user = userEvent.setup();
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    await saveLendingHistory(repository, history);
+    window.location.hash = `#/loans/${history.loan.id}`;
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const first = render(<App dbName={dbName} />);
+
+    await screen.findByRole("heading", { name: "Chi tiết khoản vay" });
+    await user.click(screen.getByRole("button", { name: "Sửa giao dịch" }));
+    await user.clear(screen.getByLabelText("Gốc đã thu (đ)"));
+    await user.type(screen.getByLabelText("Gốc đã thu (đ)"), "120000");
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Replacement was too high");
+    await user.click(screen.getByRole("button", { name: "Lưu điều chỉnh" }));
+
+    expect(await screen.findByText("Gốc còn phải thu: 880.000 đ")).toBeInTheDocument();
+    expect(screen.getByText("Lãi còn phải thu: 18.000 đ")).toBeInTheDocument();
+    const replacement = (await repository.listPayments(history.loan.id))[0];
+    expect(replacement).toMatchObject({ principalAmount: 120_000, interestAmount: 2_000, status: "active" });
+
+    await user.click(screen.getByRole("button", { name: "Hủy giao dịch" }));
+    await user.type(screen.getByLabelText("Lý do điều chỉnh"), "Replacement rejected");
+    await user.click(screen.getByRole("button", { name: "Xác nhận hủy giao dịch" }));
+
+    expect(await screen.findByText("Gốc còn phải thu: 1.000.000 đ")).toBeInTheDocument();
+    expect(screen.getByText("Lãi còn phải thu: 20.000 đ")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "Ghi nhận khoản thu" })[0]);
+    await user.type(screen.getByLabelText("Ngày thu"), "2026-07-15");
+    await user.type(screen.getByLabelText("Gốc đã thu (đ)"), "1000000");
+    await user.type(screen.getByLabelText("Lãi đã thu (đ)"), "20000");
+    await user.click(screen.getByRole("button", { name: "Lưu khoản thu" }));
+
+    expect(await screen.findByText("Đủ điều kiện tất toán")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Ngày tất toán"));
+    await user.type(screen.getByLabelText("Ngày tất toán"), "2026-07-15");
+    await user.click(screen.getByRole("button", { name: "Xác nhận tất toán" }));
+    await screen.findByText("Đã tất toán khoản vay");
+    first.unmount();
+
+    const settled = render(<App dbName={dbName} />);
+    await screen.findByText("Ngày tất toán: 2026-07-15");
+    for (const historyEntry of screen.getAllByText("Lịch sử điều chỉnh")) {
+      await user.click(historyEntry);
+    }
+    expect(screen.getByText("Replacement was too high")).toBeInTheDocument();
+    expect(screen.getByText("Replacement rejected")).toBeInTheDocument();
+    expect(screen.getByText("Đã tất toán: 2026-07-15")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Mở lại khoản vay" }));
+    await user.type(screen.getByLabelText("Lý do mở lại khoản vay"), "Correction needs another review");
+    await user.click(screen.getByRole("button", { name: "Xác nhận mở lại" }));
+    await screen.findByText("Đã mở lại khoản vay");
+    settled.unmount();
+
+    render(<App dbName={dbName} />);
+    expect(await screen.findByText("Đủ điều kiện tất toán")).toBeInTheDocument();
+    await expect(repository.listLoans(history.borrower.id)).resolves.toEqual([
+      expect.objectContaining({ id: history.loan.id, status: "active" }),
+    ]);
+    await expect(repository.listPaymentHistory(history.loan.id)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: history.payment.id, status: "adjusted" }),
+      expect.objectContaining({ id: replacement.id, status: "voided" }),
+    ]));
+    await expect(repository.listLoanLifecycleEvents(history.loan.id)).resolves.toEqual([
+      expect.objectContaining({ action: "settled", effectiveDate: "2026-07-15" }),
+      expect.objectContaining({ action: "reopened", reason: "Correction needs another review" }),
+    ]);
+    expect(confirm).toHaveBeenCalledWith("Xác nhận hủy giao dịch");
+    confirm.mockRestore();
+  });
+
   it("filters borrower loans from current collection data without changing IndexedDB", async () => {
     const user = userEvent.setup();
     const dbName = nextDbName();
@@ -817,4 +969,118 @@ async function saveLendingHistory(repository: IndexedDbLendingRepository, histor
   await repository.savePayment(history.payment);
   await repository.savePromise(history.promise);
   await repository.saveReminderSettings(history.settings);
+}
+
+async function saveAuditedLendingHistory(repository: IndexedDbLendingRepository) {
+  const history = lendingHistory();
+  const originalPayment: PaymentTransaction = {
+    ...history.payment,
+    status: "adjusted",
+    updatedAt: "2026-07-15T08:00:00.000Z",
+  };
+  const replacementPayment: PaymentTransaction = {
+    ...history.payment,
+    id: "backup-replacement-payment",
+    principalAmount: 120_000,
+    status: "voided",
+    createdAt: "2026-07-15T08:00:00.000Z",
+    updatedAt: "2026-07-15T09:00:00.000Z",
+  };
+  const editAdjustment: PaymentAdjustment = {
+    id: "backup-edit-adjustment",
+    loanId: history.loan.id,
+    paymentId: originalPayment.id,
+    replacementPaymentId: replacementPayment.id,
+    action: "edit",
+    reason: "Replacement was too high",
+    before: {
+      scheduleEntryId: history.entry.id,
+      receivedAt: history.payment.receivedAt,
+      principalAmount: history.payment.principalAmount,
+      interestAmount: history.payment.interestAmount,
+    },
+    after: {
+      scheduleEntryId: history.entry.id,
+      receivedAt: replacementPayment.receivedAt,
+      principalAmount: replacementPayment.principalAmount,
+      interestAmount: replacementPayment.interestAmount,
+    },
+    createdAt: "2026-07-15T08:00:00.000Z",
+  };
+  const voidAdjustment: PaymentAdjustment = {
+    id: "backup-void-adjustment",
+    loanId: history.loan.id,
+    paymentId: replacementPayment.id,
+    action: "void",
+    reason: "Replacement rejected",
+    before: {
+      scheduleEntryId: history.entry.id,
+      receivedAt: replacementPayment.receivedAt,
+      principalAmount: replacementPayment.principalAmount,
+      interestAmount: replacementPayment.interestAmount,
+    },
+    createdAt: "2026-07-15T09:00:00.000Z",
+  };
+  const finalPayment: PaymentTransaction = {
+    ...history.payment,
+    id: "backup-final-payment",
+    receivedAt: "2026-07-15",
+    principalAmount: history.entry.expectedPrincipal,
+    interestAmount: history.entry.expectedInterest,
+    status: "active",
+    createdAt: "2026-07-15T10:00:00.000Z",
+    updatedAt: "2026-07-15T10:00:00.000Z",
+  };
+  const settlementEvent: LoanLifecycleEvent = {
+    id: "z-backup-settlement",
+    loanId: history.loan.id,
+    action: "settled",
+    effectiveDate: "2026-07-15",
+    createdAt: "2026-07-15T11:00:00.000Z",
+  };
+  const reopenEvent: LoanLifecycleEvent = {
+    id: "a-backup-reopening",
+    loanId: history.loan.id,
+    action: "reopened",
+    effectiveDate: "2026-07-16",
+    reason: "Correction needs another review",
+    createdAt: "2026-07-16T08:00:00.000Z",
+  };
+  const settledLoan: Loan = {
+    ...history.loan,
+    status: "settled",
+    settledAt: settlementEvent.effectiveDate,
+    updatedAt: settlementEvent.createdAt,
+  };
+  const loan: Loan = {
+    ...history.loan,
+    status: "active",
+    updatedAt: reopenEvent.createdAt,
+  };
+
+  await repository.saveBorrower(history.borrower);
+  await repository.saveLoanBundle({ loan: history.loan, version: history.version, entries: [history.entry] });
+  await repository.savePaymentCorrection({
+    original: originalPayment,
+    replacement: { ...replacementPayment, status: "active", updatedAt: editAdjustment.createdAt },
+    adjustment: editAdjustment,
+  });
+  await repository.savePaymentCancellation({ original: replacementPayment, adjustment: voidAdjustment });
+  await repository.savePayment(finalPayment);
+  await repository.saveLoanLifecycleMutation({ loan: settledLoan, event: settlementEvent });
+  await repository.saveLoanLifecycleMutation({ loan, event: reopenEvent });
+  await repository.savePromise(history.promise);
+  await repository.saveReminderSettings(history.settings);
+
+  return {
+    borrower: history.borrower,
+    loan,
+    originalPayment,
+    replacementPayment,
+    finalPayment,
+    editAdjustment,
+    voidAdjustment,
+    settlementEvent,
+    reopenEvent,
+  };
 }
