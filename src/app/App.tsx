@@ -25,7 +25,7 @@ import type { StorageHealth } from "../storage/types";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { StatusBadge } from "../ui/StatusBadge";
-import { vi } from "../i18n/vi";
+import { translateError, vi } from "../i18n/vi";
 import { parseHashRoute, serializeHashRoute, type Route } from "./routes";
 
 type AppProps = {
@@ -54,7 +54,8 @@ function storageStatusLabel(message: string): string {
 }
 
 function shellMessageLabel(message: string): string {
-  return vi.shellStatus.messages[message as keyof typeof vi.shellStatus.messages] ?? vi.shellStatus.messages.unknown;
+  const catalogMessage = vi.shellStatus.messages[message as keyof typeof vi.shellStatus.messages];
+  return catalogMessage ?? translateError(message, vi.shellStatus.messages.unknown);
 }
 
 function todayFileName(): string {
@@ -79,17 +80,17 @@ function downloadJson(fileName: string, value: unknown): void {
 function messageFromRestoreError(error: unknown): string {
   if (error instanceof AppError) {
     if (error.code === "invalid-backup") {
-      return "Invalid backup file";
+      return vi.shellStatus.messages["Invalid backup file"];
     }
     if (error.code === "unsupported-backup-version") {
-      return "Unsupported backup version";
+      return vi.shellStatus.messages["Unsupported backup version"];
     }
     if (error.code === "decrypt-failed") {
-      return "Wrong backup passphrase";
+      return vi.shellStatus.messages["Wrong backup passphrase"];
     }
   }
 
-  return "Restore failed";
+  return translateError(error, vi.shellStatus.messages["Restore failed"]);
 }
 
 function downloadCalendar(fileName: string, content: string): void {
@@ -355,8 +356,8 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         downloadCalendar(calendarFileName(today), content);
       }
       await markCalendarExportCurrent(input.loan, input.loan.defaultScheduleVersionId);
-    } catch {
-      setMessage("Calendar export could not be prepared");
+    } catch (error) {
+      setMessage(translateError(error, vi.shellStatus.messages["Calendar export could not be prepared"]));
     }
   };
 
@@ -373,7 +374,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   };
 
   const resetLendingData = async () => {
-    if (!window.confirm("Clear all local lending data?")) {
+    if (!window.confirm(vi.backup.resetConfirm)) {
       setMessage("Reset cancelled");
       return;
     }
@@ -395,7 +396,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
       const restored = await restoreEncryptedBackup(parsed, restorePassphrase);
-      if (!window.confirm("Replace local records with this backup?")) {
+      if (!window.confirm(vi.backup.restoreConfirm)) {
         setMessage("Restore cancelled");
         return;
       }
@@ -430,22 +431,22 @@ export function App({ dbName, onCalendarExport }: AppProps) {
   const routeContent = (() => {
     if (route.name === "settings") {
       return (
-        <section className="operations-grid" aria-label="Backup and restore">
+        <section className="operations-grid" aria-label={vi.backup.operations}>
           <ReminderSettings value={reminderSettings} onSave={saveReminderSettings} />
           <div className="operation-panel">
-            <h2>Backup</h2>
-            <Field label="Backup passphrase" type="password" value={backupPassphrase} onChange={(event) => setBackupPassphrase(event.target.value)} />
-            <Button icon={<Archive aria-hidden="true" size={18} />} variant="primary" onClick={exportBackup}>Backup</Button>
+            <h2>{vi.backup.title}</h2>
+            <Field label={vi.backup.backupPassphrase} type="password" value={backupPassphrase} onChange={(event) => setBackupPassphrase(event.target.value)} />
+            <Button icon={<Archive aria-hidden="true" size={18} />} variant="primary" onClick={exportBackup}>{vi.backup.backup}</Button>
           </div>
           <div className="operation-panel">
-            <h2>Restore</h2>
-            <Field label="Restore passphrase" type="password" value={restorePassphrase} onChange={(event) => setRestorePassphrase(event.target.value)} />
-            <input ref={restoreInputRef} aria-label="Backup file" className="file-input" type="file" accept="application/json,.json" onChange={(event) => void restoreBackupFile(event.target.files?.[0])} />
-            <Button icon={<FileUp aria-hidden="true" size={18} />} onClick={() => restoreInputRef.current?.click()}>Restore</Button>
+            <h2>{vi.backup.restore}</h2>
+            <Field label={vi.backup.restorePassphrase} type="password" value={restorePassphrase} onChange={(event) => setRestorePassphrase(event.target.value)} />
+            <input ref={restoreInputRef} aria-label={vi.backup.file} className="file-input" type="file" accept="application/json,.json" onChange={(event) => void restoreBackupFile(event.target.files?.[0])} />
+            <Button icon={<FileUp aria-hidden="true" size={18} />} onClick={() => restoreInputRef.current?.click()}>{vi.backup.restore}</Button>
           </div>
           <div className="operation-panel">
-            <h2>Reset</h2>
-            <Button icon={<Trash2 aria-hidden="true" size={18} />} variant="danger" onClick={resetLendingData}>Reset lending data</Button>
+            <h2>{vi.backup.reset}</h2>
+            <Button icon={<Trash2 aria-hidden="true" size={18} />} variant="danger" onClick={resetLendingData}>{vi.backup.resetLending}</Button>
           </div>
         </section>
       );
@@ -471,7 +472,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
       const loanVersionIds = new Set(loanVersions.map((version) => version.id));
       return <LoanDetail
         loan={loan}
-        borrowerName={loanBorrower?.displayName ?? "Unknown borrower"}
+        borrowerName={loanBorrower?.displayName ?? vi.borrower.unknown}
         versions={loanVersions}
         entries={scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId))}
         payments={payments.filter((payment) => payment.loanId === loan.id)}
@@ -486,7 +487,7 @@ export function App({ dbName, onCalendarExport }: AppProps) {
         onSaveReminderOverride={(value) => saveLoanReminderOverride(loan, value)}
         onExportCalendar={() => void prepareCalendarExport({
           loan,
-          borrowerName: loanBorrower?.displayName ?? "Unknown borrower",
+          borrowerName: loanBorrower?.displayName ?? vi.borrower.unknown,
           entries: scheduleEntries.filter((entry) => loanVersionIds.has(entry.scheduleVersionId)),
           versions: loanVersions,
           payments: payments.filter((payment) => payment.loanId === loan.id),
@@ -507,13 +508,13 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     <main className="app-shell">
       <section className="hero-band">
         <h1>{vi.appName}</h1>
-        <nav className="app-nav" aria-label="Primary navigation">
+        <nav className="app-nav" aria-label={vi.common.primaryNavigation}>
           <a href={serializeHashRoute({ name: "dashboard" })}>{vi.navigation.home}</a>
           <a href={serializeHashRoute({ name: "settings" })}>{vi.navigation.settings}</a>
         </nav>
       </section>
 
-      <section className="status-strip" aria-label="System status">
+      <section className="status-strip" aria-label={vi.common.systemStatus}>
         <StatusBadge tone={isOnline ? "ok" : "warn"}>{isOnline ? vi.shellStatus.online : vi.shellStatus.offline}</StatusBadge>
         <StatusBadge tone={health.available ? "ok" : "error"}>{storageStatusLabel(health.message)}</StatusBadge>
         <span className="record-count">{recordLabel(health.recordCount)}</span>

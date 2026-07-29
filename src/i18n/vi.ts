@@ -1,7 +1,10 @@
 export const vi = {
   appName: "Quản lý tiền lãi",
   navigation: { home: "Trang chủ", settings: "Cài đặt" },
-  common: { save: "Lưu", cancel: "Hủy", back: "Quay lại", note: "Ghi chú", actions: "Thao tác", status: "Trạng thái" },
+  common: {
+    save: "Lưu", cancel: "Hủy", back: "Quay lại", note: "Ghi chú", actions: "Thao tác", status: "Trạng thái",
+    to: "đến", none: "Không có", unassigned: "Chưa phân bổ", primaryNavigation: "Điều hướng chính", systemStatus: "Trạng thái hệ thống",
+  },
   shellStatus: {
     online: "Đang online",
     offline: "Đang offline",
@@ -47,7 +50,7 @@ export const vi = {
     overdue: "Quá hạn", paid: "Đã trả đủ", open: "Đang mở", fulfilled: "Đã thực hiện", cancelled: "Đã hủy", expired: "Đã hết hạn",
   },
   borrower: {
-    title: "Người vay", new: "Thêm người vay", edit: "Sửa người vay", save: "Lưu người vay",
+    title: "Người vay", new: "Thêm người vay", edit: "Sửa người vay", save: "Lưu người vay", unknown: "Không rõ người vay",
     archive: "Lưu trữ người vay", displayName: "Tên hiển thị", phone: "Số điện thoại",
     note: "Ghi chú", loans: "Các khoản vay", noBorrowers: "Chưa có người vay nào.",
     noLoans: "Người vay này chưa có khoản vay nào.", notFound: "Không tìm thấy người vay",
@@ -57,7 +60,7 @@ export const vi = {
     principal: "Tiền gốc (đ)", disbursementDate: "Ngày giải ngân", calculationModel: "Mô hình tính",
     monthlyDueDay: "Ngày thu hàng tháng", maturityDate: "Ngày tất toán", rate: "Lãi suất (%)",
     rateUnit: "Đơn vị lãi suất", partialPeriod: "Cách tính lãi kỳ không trọn tháng", note: "Ghi chú",
-    preview: "Xem trước lịch thu", previewDueDate: "Ngày đến hạn", previewPrincipal: "Gốc", previewInterest: "Lãi", confirmSave: "Xác nhận và lưu khoản vay", currentBalance: "Dư nợ hiện tại",
+    preview: "Xem trước lịch thu", previewDueDate: "Ngày đến hạn", previewPrincipal: "Gốc", previewInterest: "Lãi", interest: "Lãi", confirmSave: "Xác nhận và lưu khoản vay", currentBalance: "Dư nợ hiện tại",
     outstandingPrincipal: "Gốc còn phải thu", outstandingInterest: "Lãi còn phải thu", nextDueDate: "Ngày thu tiếp theo",
     versions: "Các phiên bản lịch thu", active: "đang áp dụng", readOnly: "chỉ xem", originalDue: "Ngày đến hạn gốc",
   },
@@ -72,7 +75,7 @@ export const vi = {
     noPromises: "Chưa có lời hứa trả nào.", promise: "Lời hứa trả",
   },
   revision: {
-    effectiveDate: "Ngày áp dụng", adjustmentReason: "Lý do điều chỉnh", save: "Lưu phiên bản lịch mới",
+    title: "Điều chỉnh lịch thu", newVersion: "Phiên bản lịch thu mới", effectiveDate: "Ngày áp dụng", adjustmentReason: "Lý do điều chỉnh", save: "Lưu phiên bản lịch mới",
   },
   reminder: {
     global: "Nhắc hạn mặc định", loan: "Nhắc hạn riêng khoản vay", useOverride: "Dùng cấu hình nhắc riêng",
@@ -85,8 +88,9 @@ export const vi = {
     markedCurrent: "Đã cập nhật trạng thái lịch Calendar.", preparationFailed: "Không thể chuẩn bị lịch Calendar.",
   },
   backup: {
-    title: "Sao lưu", restore: "Khôi phục", reset: "Xóa dữ liệu", backupPassphrase: "Mật khẩu sao lưu",
+    title: "Sao lưu", restore: "Khôi phục", reset: "Xóa dữ liệu", operations: "Sao lưu và khôi phục", backupPassphrase: "Mật khẩu sao lưu",
     restorePassphrase: "Mật khẩu khôi phục", file: "Tệp sao lưu", backup: "Sao lưu", resetLending: "Xóa dữ liệu cho vay",
+    resetConfirm: "Xóa toàn bộ dữ liệu cho vay cục bộ?", restoreConfirm: "Thay thế các bản ghi cục bộ bằng bản sao lưu này?",
   },
   errors: {
     displayNameRequired: "Tên hiển thị là bắt buộc", genericBorrowerSave: "Không thể lưu người vay",
