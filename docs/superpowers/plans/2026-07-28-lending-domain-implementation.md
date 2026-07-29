@@ -353,6 +353,12 @@ calculateLoanSummary(input: {
   today: DateOnly;
 }): LoanSummary
 
+selectCurrentLoanEntries(input: {
+  entries: ScheduleEntry[];
+  versions: ScheduleVersion[];
+  activeScheduleVersionId: string;
+}): ScheduleEntry[]
+
 export interface RevisionInput {
   previous: ScheduleVersion;
   effectiveDate: DateOnly;
@@ -590,7 +596,7 @@ ScheduleRevisionFormProps: {
 - [ ] Implement loan detail sections for current balance, next due date, due/overdue counts, schedule-version history, payment history, promise history, and schedule rows.
 - [ ] Add per-entry actions for record payment, record promise, mark promise fulfilled/cancelled, and open a revision flow. Keep the original due date visible when a promise is late.
 - [ ] Show principal and interest expected/received/outstanding separately. Do not merge them into one opaque total.
-- [ ] Derive current balances from entries across all schedule versions so payments linked to an immutable pre-revision entry continue reducing the loan balance; show the active schedule and historical versions separately.
+- [ ] Derive current balances from all active-version entries plus old-version entries whose `dueDate` is on or before the active version's `effectiveDate`; exclude superseded future entries while keeping them visible in read-only history.
 - [ ] Show old schedule versions read-only and label the active version. Existing payments remain attached to their original entry/version.
 - [ ] Build the pure `.ics` content before marking an export current, pass the prepared content and version metadata to the Task 9 download boundary, and show stale-export state after a revision.
 - [ ] Persist a revision's loan pointer, new version, and new entries with the existing repository bundle transaction so a partial revision cannot become active.
@@ -649,6 +655,7 @@ ReminderSettingsProps: {
 - [ ] Add a promise for `2026-09-17` with note `Mai tra`, then verify it appears in promises and does not reduce outstanding balances.
 - [ ] Move the app date/test fixture past the promise date and verify the entry displays overdue without generating repeated notifications.
 - [ ] Attempt a rate revision without a reason and verify it is blocked; add a reason, save the revision, and verify the old version and its history remain visible.
+- [ ] After revision, verify current balances include unpaid/partially-paid old entries due on or before the effective date, exclude superseded old future entries, and include all active-version entries.
 - [ ] Export `.ics`, inspect that due and promise events exist, and verify paid entries are excluded.
 - [ ] Export an encrypted backup, clear through the app’s explicit reset flow, restore the backup, and confirm borrower, loan, versions, entries, payment, promise, and settings all return.
 - [ ] Use browser offline mode and repeat dashboard navigation, loan detail, payment entry, and backup restore read access.
