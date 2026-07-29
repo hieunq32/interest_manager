@@ -323,6 +323,70 @@ describe("App", () => {
     vi.restoreAllMocks();
   });
 
+  it("uses the revision boundary when calculating dashboard balances", async () => {
+    const dbName = nextDbName();
+    const repository = new IndexedDbLendingRepository(new IndexedDbRecordStore(dbName));
+    const history = lendingHistory();
+    const firstVersion = { ...history.version, id: "dashboard-version-1" };
+    const activeVersion: ScheduleVersion = {
+      ...firstVersion,
+      id: "dashboard-version-2",
+      versionNumber: 2,
+      effectiveDate: "2026-09-01",
+      createdAt: history.loan.updatedAt,
+    };
+    const oldDue: ScheduleEntry = {
+      ...history.entry,
+      id: "dashboard-old-due",
+      scheduleVersionId: firstVersion.id,
+      dueDate: "2026-08-05",
+      expectedPrincipal: 1_000_000,
+      expectedInterest: 200_000,
+    };
+    const oldFuture: ScheduleEntry = {
+      ...history.entry,
+      id: "dashboard-old-future",
+      scheduleVersionId: firstVersion.id,
+      dueDate: "2026-09-05",
+      expectedPrincipal: 5_000_000,
+      expectedInterest: 500_000,
+    };
+    const activeEntry: ScheduleEntry = {
+      ...history.entry,
+      id: "dashboard-active",
+      scheduleVersionId: activeVersion.id,
+      dueDate: "2026-10-05",
+      expectedPrincipal: 1_000_000,
+      expectedInterest: 200_000,
+    };
+    const originalLoan = { ...history.loan, defaultScheduleVersionId: firstVersion.id };
+    const revisedLoan = { ...originalLoan, defaultScheduleVersionId: activeVersion.id };
+    await repository.saveBorrower(history.borrower);
+    await repository.saveLoanBundle({
+      loan: originalLoan,
+      version: firstVersion,
+      entries: [oldDue, oldFuture],
+    });
+    await repository.saveLoanBundle({
+      loan: revisedLoan,
+      version: activeVersion,
+      entries: [activeEntry],
+    });
+    await repository.savePayment({
+      ...history.payment,
+      scheduleEntryId: oldDue.id,
+      principalAmount: 500_000,
+      interestAmount: 200_000,
+    });
+    window.location.hash = "#/";
+
+    render(<App dbName={dbName} />);
+
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Outstanding principal: 1,500,000 VND")).toBeInTheDocument());
+    expect(screen.getByText("Outstanding interest: 200,000 VND")).toBeInTheDocument();
+  });
+
   it("persists a payment and a revision from the loan detail workflow", async () => {
     const user = userEvent.setup();
     const onCalendarExport = vi.fn().mockResolvedValue(undefined);

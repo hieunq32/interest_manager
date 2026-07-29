@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { calculateEntryStatus, calculateEntryTotals, calculateLoanSummary } from "./ledger";
-import type { DateOnly, EntryStatus, PaymentTransaction, PromiseToPay, ScheduleEntry } from "./types";
+import { calculateEntryStatus, calculateEntryTotals, calculateLoanSummary, selectCurrentLoanEntries } from "./ledger";
+import type {
+  DateOnly,
+  EntryStatus,
+  PaymentTransaction,
+  PromiseToPay,
+  ScheduleEntry,
+  ScheduleVersion,
+} from "./types";
 
 function entry(overrides: Partial<ScheduleEntry> = {}): ScheduleEntry {
   return {
@@ -43,6 +50,69 @@ function promise(overrides: Partial<PromiseToPay> = {}): PromiseToPay {
     ...overrides,
   };
 }
+
+function version(overrides: Partial<ScheduleVersion> = {}): ScheduleVersion {
+  return {
+    id: "version-1",
+    loanId: "loan-1",
+    versionNumber: 1,
+    effectiveDate: "2026-06-20",
+    calculationModel: "equal-principal-flat-interest",
+    principalBase: 10_000_000,
+    disbursementDate: "2026-06-20",
+    monthlyDueDay: 5,
+    maturityDate: "2026-12-15",
+    rateValue: 0.02,
+    rateUnit: "monthly",
+    partialPeriodInterestMode: "full-period",
+    createdAt: "2026-06-20T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("current loan entries", () => {
+  const versions = [
+    version(),
+    version({ id: "version-2", versionNumber: 2, effectiveDate: "2026-09-01" }),
+  ];
+
+  it("includes an old-version entry due on or before the active version effective date", () => {
+    const oldDue = entry({ id: "old-due", dueDate: "2026-09-01" });
+
+    expect(selectCurrentLoanEntries({
+      entries: [oldDue],
+      versions,
+      activeScheduleVersionId: "version-2",
+    })).toEqual([oldDue]);
+  });
+
+  it("excludes a superseded old-version entry due after the active version effective date", () => {
+    expect(selectCurrentLoanEntries({
+      entries: [entry({ id: "old-future", dueDate: "2026-09-05" })],
+      versions,
+      activeScheduleVersionId: "version-2",
+    })).toEqual([]);
+  });
+
+  it("includes every active-version entry regardless of its due date", () => {
+    const activeBeforeEffective = entry({
+      id: "active-before-effective",
+      scheduleVersionId: "version-2",
+      dueDate: "2026-08-05",
+    });
+    const activeFuture = entry({
+      id: "active-future",
+      scheduleVersionId: "version-2",
+      dueDate: "2026-10-05",
+    });
+
+    expect(selectCurrentLoanEntries({
+      entries: [activeBeforeEffective, activeFuture],
+      versions,
+      activeScheduleVersionId: "version-2",
+    })).toEqual([activeBeforeEffective, activeFuture]);
+  });
+});
 
 describe("ledger totals", () => {
   it("aggregates multiple entry payments by component and caps displayed overpayment", () => {

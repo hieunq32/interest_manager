@@ -6,6 +6,7 @@ import type {
   PaymentTransaction,
   PromiseToPay,
   ScheduleEntry,
+  ScheduleVersion,
 } from "./types";
 
 export interface EntryTotals {
@@ -38,6 +39,36 @@ function addDays(date: DateOnly, days: number): DateOnly {
   value.setUTCHours(0, 0, 0, 0);
   value.setUTCFullYear(year, month - 1, day + days);
   return `${String(value.getUTCFullYear()).padStart(4, "0")}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function selectCurrentLoanEntries(input: {
+  entries: ScheduleEntry[];
+  versions: ScheduleVersion[];
+  activeScheduleVersionId: string;
+}): ScheduleEntry[] {
+  const activeVersion = input.versions.find((version) => version.id === input.activeScheduleVersionId);
+  if (!activeVersion) {
+    return [];
+  }
+
+  const oldVersionIds = new Set(
+    input.versions
+      .filter(
+        (version) =>
+          version.loanId === activeVersion.loanId &&
+          version.versionNumber < activeVersion.versionNumber,
+      )
+      .map((version) => version.id),
+  );
+
+  return input.entries.filter(
+    (entry) =>
+      entry.scheduleVersionId === activeVersion.id ||
+      (
+        oldVersionIds.has(entry.scheduleVersionId) &&
+        compareDateOnly(entry.dueDate, activeVersion.effectiveDate) <= 0
+      ),
+  );
 }
 
 export function calculateEntryTotals(entry: ScheduleEntry, payments: PaymentTransaction[]): EntryTotals {

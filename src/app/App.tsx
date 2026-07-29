@@ -1,7 +1,11 @@
 import { Archive, FileUp, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEncryptedBackup, restoreEncryptedBackup } from "../backup/backupService";
-import { calculateEntryStatus, calculateLoanSummary } from "../lending/domain/ledger";
+import {
+  calculateEntryStatus,
+  calculateLoanSummary,
+  selectCurrentLoanEntries,
+} from "../lending/domain/ledger";
 import { createScheduleRevision, type RevisionInput } from "../lending/domain/revisions";
 import { generateSchedule } from "../lending/domain/scheduleGenerator";
 import type { Borrower, Loan, PaymentTransaction, PromiseToPay, ScheduleEntry, ScheduleVersion } from "../lending/domain/types";
@@ -385,7 +389,11 @@ export function App({ dbName, onCalendarExport }: AppProps) {
     .filter((candidate) => candidate.status === "active")
     .map((candidate) => calculateLoanSummary({
       loanId: candidate.id,
-      entries: scheduleEntries.filter((entry) => entry.scheduleVersionId === candidate.defaultScheduleVersionId),
+      entries: selectCurrentLoanEntries({
+        entries: scheduleEntries,
+        versions: scheduleVersions,
+        activeScheduleVersionId: candidate.defaultScheduleVersionId,
+      }),
       payments: payments.filter((payment) => payment.loanId === candidate.id),
       promises: promises.filter((promise) => promise.loanId === candidate.id),
       today: todayInVietnam(),
