@@ -110,7 +110,7 @@ export function ScheduleRevisionForm({ current, onSave }: ScheduleRevisionFormPr
 
   return (
     <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <Field label="Ngày áp dụng" type="date" value={form.effectiveDate} onChange={(event) => update("effectiveDate", event.target.value)} />
+      <Field label={vi.revision.effectiveDate} type="date" value={form.effectiveDate} onChange={(event) => update("effectiveDate", event.target.value)} />
       <label className="field" htmlFor="revision-calculation-model"><span>{vi.loan.calculationModel}</span>
         <select id="revision-calculation-model" value={form.calculationModel} onChange={(event) => update("calculationModel", event.target.value as CalculationModel)}>
           {Object.entries(calculationModelLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -131,11 +131,11 @@ export function ScheduleRevisionForm({ current, onSave }: ScheduleRevisionFormPr
           {Object.entries(partialPeriodInterestModeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
-      <label className="field" htmlFor="adjustment-reason"><span>Lý do điều chỉnh</span>
+      <label className="field" htmlFor="adjustment-reason"><span>{vi.revision.adjustmentReason}</span>
         <textarea id="adjustment-reason" value={form.adjustmentReason} onChange={(event) => update("adjustmentReason", event.target.value)} />
       </label>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      <Button icon={<Save aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} type="submit">Lưu phiên bản lịch mới</Button>
+      <Button icon={<Save aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} type="submit">{vi.revision.save}</Button>
     </form>
   );
 }

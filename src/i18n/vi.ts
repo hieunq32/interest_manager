@@ -57,7 +57,7 @@ export const vi = {
     principal: "Tiền gốc (đ)", disbursementDate: "Ngày giải ngân", calculationModel: "Mô hình tính",
     monthlyDueDay: "Ngày thu hàng tháng", maturityDate: "Ngày tất toán", rate: "Lãi suất (%)",
     rateUnit: "Đơn vị lãi suất", partialPeriod: "Cách tính lãi kỳ không trọn tháng", note: "Ghi chú",
-    preview: "Xem trước lịch thu", confirmSave: "Xác nhận và lưu khoản vay", currentBalance: "Dư nợ hiện tại",
+    preview: "Xem trước lịch thu", previewDueDate: "Ngày đến hạn", previewPrincipal: "Gốc", previewInterest: "Lãi", confirmSave: "Xác nhận và lưu khoản vay", currentBalance: "Dư nợ hiện tại",
     outstandingPrincipal: "Gốc còn phải thu", outstandingInterest: "Lãi còn phải thu", nextDueDate: "Ngày thu tiếp theo",
     versions: "Các phiên bản lịch thu", active: "đang áp dụng", readOnly: "chỉ xem", originalDue: "Ngày đến hạn gốc",
   },
@@ -68,8 +68,11 @@ export const vi = {
   },
   promise: {
     record: "Ghi nhận lời hứa trả", history: "Lịch sử hứa trả", promisedDate: "Ngày hứa trả",
-    note: "Ghi chú hứa trả", save: "Lưu lời hứa trả", fulfil: "Đánh dấu đã thực hiện", cancel: "Hủy lời hứa trả",
+    promisedPrincipal: "Gốc hứa trả (đ)", promisedInterest: "Lãi hứa trả (đ)", note: "Ghi chú hứa trả", save: "Lưu lời hứa trả", fulfil: "Đánh dấu đã thực hiện", cancel: "Hủy lời hứa trả",
     noPromises: "Chưa có lời hứa trả nào.", promise: "Lời hứa trả",
+  },
+  revision: {
+    effectiveDate: "Ngày áp dụng", adjustmentReason: "Lý do điều chỉnh", save: "Lưu phiên bản lịch mới",
   },
   reminder: {
     global: "Nhắc hạn mặc định", loan: "Nhắc hạn riêng khoản vay", useOverride: "Dùng cấu hình nhắc riêng",

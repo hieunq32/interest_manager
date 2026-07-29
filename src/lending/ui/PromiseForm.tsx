@@ -60,8 +60,8 @@ export function PromiseForm({ loanId, scheduleEntryId, onSave }: PromiseFormProp
   return (
     <form className="lending-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <Field label={vi.promise.promisedDate} type="date" value={promisedDate} onChange={(event) => setPromisedDate(event.target.value)} />
-      <Field label="Gốc hứa trả (đ)" inputMode="numeric" value={promisedPrincipal} onChange={(event) => setPromisedPrincipal(event.target.value)} />
-      <Field label="Lãi hứa trả (đ)" inputMode="numeric" value={promisedInterest} onChange={(event) => setPromisedInterest(event.target.value)} />
+      <Field label={vi.promise.promisedPrincipal} inputMode="numeric" value={promisedPrincipal} onChange={(event) => setPromisedPrincipal(event.target.value)} />
+      <Field label={vi.promise.promisedInterest} inputMode="numeric" value={promisedInterest} onChange={(event) => setPromisedInterest(event.target.value)} />
       <label className="field" htmlFor="promise-note"><span>{vi.promise.note}</span>
         <textarea id="promise-note" value={note} onChange={(event) => setNote(event.target.value)} />
       </label>

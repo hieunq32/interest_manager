@@ -232,7 +232,7 @@ export function LoanForm({ borrowerId, onSave, onCancel }: LoanFormWithCancelPro
       {draft ? <section className="schedule-preview" aria-labelledby="schedule-preview-heading">
         <h3 id="schedule-preview-heading">{vi.loan.preview}</h3>
         <table>
-          <thead><tr><th>Ngày đến hạn</th><th>Gốc</th><th>Lãi</th></tr></thead>
+          <thead><tr><th>{vi.loan.previewDueDate}</th><th>{vi.loan.previewPrincipal}</th><th>{vi.loan.previewInterest}</th></tr></thead>
           <tbody>{entries.map((entry) => <tr key={entry.id}><td>{entry.dueDate}</td><td>{formatMoneyVnd(entry.expectedPrincipal)}</td><td>{formatMoneyVnd(entry.expectedInterest)}</td></tr>)}</tbody>
         </table>
         <Button icon={<Check aria-hidden="true" size={18} />} variant="primary" disabled={isSaving} onClick={() => void save()}>
