@@ -1,4 +1,5 @@
 import { compareDateOnly } from "./dateRules";
+import { normalizePayment } from "./paymentCorrections";
 import type {
   DateOnly,
   EntryStatus,
@@ -72,7 +73,9 @@ export function selectCurrentLoanEntries(input: {
 }
 
 export function calculateEntryTotals(entry: ScheduleEntry, payments: PaymentTransaction[]): EntryTotals {
-  const matchingPayments = payments.filter((payment) => payment.scheduleEntryId === entry.id);
+  const matchingPayments = payments.filter(
+    (payment) => payment.scheduleEntryId === entry.id && normalizePayment(payment).status === "active",
+  );
   const receivedPrincipal = matchingPayments.reduce((total, payment) => total + payment.principalAmount, 0);
   const receivedInterest = matchingPayments.reduce((total, payment) => total + payment.interestAmount, 0);
 
